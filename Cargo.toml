@@ -1,0 +1,21 @@
+[package]
+name = "glib"
+version = "0.0.1"
+authors = ["guillaume1.gomez@gmail.com", "letang.jeremy@gmail.com"]
+
+description = "A rust binding for the GLib library"
+repository = "https://github.com/rust-gnome/glib"
+license = "LGPL-3.0+"
+
+[dependencies]
+libc = "0.1"
+c_vec = "^1.0.0"
+
+[lib]
+name = "glib"
+crate_type = ["rlib"]
+path = "src/glib.rs"
+
+[dependencies.glib-sys]
+path = "glib-sys"
+version = "0.1.0"
