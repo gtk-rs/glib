@@ -1,5 +1,5 @@
 [package]
-name = "glib"
+name = "glib-support"
 version = "0.0.1"
 authors = ["The Rust-GNOME Project Developers"]
 
@@ -10,7 +10,7 @@ readme="README.md"
 keywords=["glib", "gtk", "gnome", "GUI"]
 
 [lib]
-name = "glib"
+name = "glib-support"
 
 [dependencies]
 libc = "0.1"
