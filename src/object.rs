@@ -1,4 +1,4 @@
-// Copyright 2015, The Rust-GNOME Project Developers.
+// Copyright 2015, The Gtk-rs Project Developers.
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
@@ -8,23 +8,23 @@ use std::marker::PhantomData;
 use std::ptr;
 use translate::*;
 use types::{self, Type, StaticType};
-use ffi;
+use gobject_ffi;
 
 /// A reference to any GObject descendant.
 #[allow(raw_pointer_derive)]
 #[derive(Debug, PartialEq, Eq)]
-pub struct Ref(*mut ffi::GObject);
+pub struct Ref(*mut gobject_ffi::GObject);
 
 impl Ref {
     #[inline]
-    fn add_ref(&self) { unsafe { ffi::g_object_ref_sink(self.0 as *mut _); } }
+    fn add_ref(&self) { unsafe { gobject_ffi::g_object_ref_sink(self.0 as *mut _); } }
 
     #[inline]
-    fn unref(&self) { unsafe { ffi::g_object_unref(self.0 as *mut _); } }
+    fn unref(&self) { unsafe { gobject_ffi::g_object_unref(self.0 as *mut _); } }
 
     /// Transfer: none constructor.
     #[inline]
-    pub fn from_glib_none(ptr: *mut ffi::GObject) -> Ref {
+    pub fn from_glib_none(ptr: *mut gobject_ffi::GObject) -> Ref {
         let r = Ref(ptr);
         r.add_ref();
         r
@@ -32,19 +32,19 @@ impl Ref {
 
     /// Transfer: full constructor.
     #[inline]
-    pub fn from_glib_full(ptr: *mut ffi::GObject) -> Ref {
+    pub fn from_glib_full(ptr: *mut gobject_ffi::GObject) -> Ref {
         Ref(ptr)
     }
 
     /// Returns a transfer: none raw pointer.
     #[inline]
-    pub fn to_glib_none(&self) -> *mut ffi::GObject {
+    pub fn to_glib_none(&self) -> *mut gobject_ffi::GObject {
         self.0
     }
 
     /// Returns a transfer: full raw pointer.
     #[inline]
-    pub fn to_glib_full(&self) -> *mut ffi::GObject {
+    pub fn to_glib_full(&self) -> *mut gobject_ffi::GObject {
         self.add_ref();
         self.0
     }
@@ -171,7 +171,8 @@ pub trait Downcast<T> {
     /// Tries to downcast to `T`.
     ///
     /// Returns `Ok(T)` if the instance implements `T` and `Err(Self)` otherwise.
-    fn downcast(self) -> Result<T, Self>;
+    fn downcast(self) -> Result<T, Self>
+        where Self: Sized;
     /// Downcasts to `T` unconditionally.
     ///
     /// Panics if the instance doesn't implement `T`.
@@ -201,7 +202,7 @@ where Super: Wrapper, Sub: Wrapper + Upcast<Super> {
 pub struct Object(Ref);
 
 impl Wrapper for Object {
-    type GlibType = ffi::GObject;
+    type GlibType = gobject_ffi::GObject;
     #[inline]
     unsafe fn wrap(r: Ref) -> Object { Object(r) }
     #[inline]
