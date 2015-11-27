@@ -2,10 +2,6 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
-/*!
-Bindings and wrappers for __GLib__
-*/
-
 extern crate libc;
 extern crate glib_sys as glib_ffi;
 extern crate gobject_sys as gobject_ffi;
@@ -18,12 +14,22 @@ pub use self::list::{List, Elem, RevElem};
 pub use self::slist::{SList, SElem};
 pub use self::glib_container::GlibContainer;
 pub use self::error::{Error};
+pub use self::object::Object;
 pub use self::permission::Permission;
 pub use self::source::{Continue, idle_add, timeout_add, timeout_add_seconds};
 pub use self::traits::FFIGObject;
 pub use self::value::{Value, ValuePublic};
 pub use types::Type;
 pub use self::date::{TimeVal, Time, Date, Year, Month, Weekday, Day};
+
+#[macro_use]
+pub mod wrapper;
+#[macro_use]
+pub mod boxed;
+#[macro_use]
+pub mod refcounted;
+#[macro_use]
+pub mod object;
 
 mod app_info;
 mod list;
@@ -36,8 +42,7 @@ pub mod source;
 pub mod traits;
 pub mod translate;
 mod value;
-pub mod boxed;
-pub mod object;
+
 pub mod types;
 pub mod date;
 
