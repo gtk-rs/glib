@@ -23,6 +23,13 @@ impl Value {
         Value { inner: mem::zeroed() }
     }
 
+    pub unsafe fn new_with<T: ValuePublic>(with: &T, _type: Type) -> Value {
+        let mut value = Value::new();
+        value.init(_type);
+        value.set(with);
+        value
+    }
+
     pub fn init(&mut self, _type: Type) {
         unsafe { gobject_ffi::g_value_init(&mut self.inner, _type.to_glib()); }
     }
