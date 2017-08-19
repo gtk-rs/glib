@@ -4,19 +4,11 @@
 
 use ffi;
 use translate::*;
-use UserDirectory;
-
-pub fn get_application_name() -> Option<String> {
-    unsafe {
-        from_glib_full(ffi::g_get_application_name())
-    }
-}
-
-pub fn set_application_name(name: Option<&str>) {
-    unsafe {
-        ffi::g_set_application_name(name.to_glib_none().0)
-    }
-}
+use std;
+use std::path::{Path, PathBuf};
+use error::BoolError;
+use Error;
+use std::ptr;
 
 /// Same as [`get_prgname()`].
 ///
@@ -44,152 +36,144 @@ pub fn set_prgname(name: Option<&str>) {
     }
 }
 
-pub fn get_environ() -> Vec<String> {
-    unsafe {
-        FromGlibPtrContainer::from_glib_full(ffi::g_get_environ())
-    }
-}
-
-#[cfg(unix)]
 pub fn getenv(variable_name: &str) -> Option<String> {
+    #[cfg(windows)]
+    use ffi::g_getenv_utf8 as g_getenv;
+    #[cfg(not(windows))]
+    use ffi::g_getenv;
+
     unsafe {
-        from_glib_none(ffi::g_getenv(variable_name.to_glib_none().0))
+        from_glib_none(g_getenv(variable_name.to_glib_none().0))
     }
 }
 
-#[cfg(unix)]
-pub fn setenv(variable_name: &str, value: &str, overwrite: bool) -> bool {
+pub fn setenv(variable_name: &str, value: &str, overwrite: bool) -> Result<(), BoolError> {
+    #[cfg(windows)]
+    use ffi::g_setenv_utf8 as g_setenv;
+    #[cfg(not(windows))]
+    use ffi::g_setenv;
+
     unsafe {
-        from_glib(ffi::g_setenv(variable_name.to_glib_none().0,
+        BoolError::from_glib(g_setenv(variable_name.to_glib_none().0,
                                 value.to_glib_none().0,
-                                overwrite.to_glib()))
+                                overwrite.to_glib()),
+                             "Failed to set environment variable")
     }
 }
 
-#[cfg(unix)]
 pub fn unsetenv(variable_name: &str) {
-    unsafe {
-        ffi::g_unsetenv(variable_name.to_glib_none().0)
-    }
-}
+    #[cfg(windows)]
+    use ffi::g_unsetenv_utf8 as g_unsetenv;
+    #[cfg(not(windows))]
+    use ffi::g_unsetenv;
 
-pub fn listenv() -> Vec<String> {
     unsafe {
-        FromGlibPtrContainer::from_glib_none(ffi::g_listenv())
+        g_unsetenv(variable_name.to_glib_none().0)
     }
 }
 
 pub fn get_user_name() -> Option<String> {
+    #[cfg(all(windows,target_arch="x86"))]
+    use ffi::g_get_user_name_utf8 as g_get_user_name;
+    #[cfg(not(all(windows,target_arch="x86")))]
+    use ffi::g_get_user_name;
+
     unsafe {
-        from_glib_none(ffi::g_get_user_name())
+        from_glib_none(g_get_user_name())
     }
 }
 
-pub fn get_real_name() -> Option<String> {
+pub fn get_real_name() -> Option<std::path::PathBuf> {
+    #[cfg(all(windows,target_arch="x86"))]
+    use ffi::g_get_real_name_utf8 as g_get_real_name;
+    #[cfg(not(all(windows,target_arch="x86")))]
+    use ffi::g_get_real_name;
+
     unsafe {
-        from_glib_none(ffi::g_get_real_name())
+        from_glib_none(g_get_real_name())
     }
 }
 
-pub fn get_user_cache_dir() -> Option<String> {
+pub fn get_current_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    use ffi::g_get_current_dir_utf8 as g_get_current_dir;
+    #[cfg(not(windows))]
+    use ffi::g_get_current_dir;
+
     unsafe {
-        from_glib_none(ffi::g_get_user_cache_dir())
+        from_glib_full(g_get_current_dir())
     }
 }
 
-pub fn get_user_data_dir() -> Option<String> {
+pub fn filename_to_uri<'a, P: AsRef<Path>, Q: Into<Option<&'a str>>>(filename: P, hostname: Q) -> Result<String, Error> {
+    #[cfg(windows)]
+    use ffi::g_filename_to_uri_utf8 as g_filename_to_uri;
+    #[cfg(not(windows))]
+    use ffi::g_filename_to_uri;
+
+    let hostname = hostname.into();
+    let hostname = hostname.to_glib_none();
     unsafe {
-        from_glib_none(ffi::g_get_user_data_dir())
+        let mut error = std::ptr::null_mut();
+        let ret = g_filename_to_uri(filename.as_ref().to_glib_none().0, hostname.0, &mut error);
+        if error.is_null() { Ok(from_glib_full(ret)) } else { Err(from_glib_full(error)) }
     }
 }
 
-pub fn get_user_config_dir() -> Option<String> {
+pub fn filename_from_uri(uri: &str) -> Result<(std::path::PathBuf, Option<String>), Error> {
+    #[cfg(windows)]
+    use ffi::g_filename_from_uri_utf8 as g_filename_from_uri;
+    #[cfg(not(windows))]
+    use ffi::g_filename_from_uri;
+
     unsafe {
-        from_glib_none(ffi::g_get_user_config_dir())
+        let mut hostname = ptr::null_mut();
+        let mut error = ptr::null_mut();
+        let ret = g_filename_from_uri(uri.to_glib_none().0, &mut hostname, &mut error);
+        if error.is_null() { Ok((from_glib_full(ret), from_glib_full(hostname))) } else { Err(from_glib_full(error)) }
     }
 }
 
-pub fn get_user_runtime_dir() -> Option<String> {
+pub fn find_program_in_path<P: AsRef<Path>>(program: P) -> Option<PathBuf> {
+    #[cfg(all(windows,target_arch="x86"))]
+    use ffi::g_find_program_in_path_utf8 as g_find_program_in_path;
+    #[cfg(not(all(windows,target_arch="x86")))]
+    use ffi::g_find_program_in_path;
+
     unsafe {
-        from_glib_none(ffi::g_get_user_runtime_dir())
+        from_glib_full(g_find_program_in_path(program.as_ref().to_glib_none().0))
     }
 }
 
-pub fn get_user_special_dir(directory: UserDirectory) -> Option<String> {
+pub fn get_home_dir() -> Option<std::path::PathBuf> {
+    #[cfg(all(windows,target_arch="x86"))]
+    use ffi::g_get_home_dir_utf8 as g_get_home_dir;
+    #[cfg(not(all(windows,target_arch="x86")))]
+    use ffi::g_get_home_dir;
+
     unsafe {
-        from_glib_none(ffi::g_get_user_special_dir(directory.to_glib()))
+        from_glib_none(g_get_home_dir())
     }
 }
 
-pub fn get_system_data_dirs() -> Vec<String> {
+pub fn get_tmp_dir() -> Option<std::path::PathBuf> {
+    #[cfg(all(windows,target_arch="x86"))]
+    use ffi::g_get_tmp_dir_utf8 as g_get_tmp_dir;
+    #[cfg(not(all(windows,target_arch="x86")))]
+    use ffi::g_get_tmp_dir;
+
     unsafe {
-        FromGlibPtrContainer::from_glib_none(ffi::g_get_system_data_dirs())
+        from_glib_none(g_get_tmp_dir())
     }
 }
 
-pub fn get_system_config_dirs() -> Vec<String> {
-    unsafe {
-        FromGlibPtrContainer::from_glib_none(ffi::g_get_system_config_dirs())
-    }
-}
+pub fn mkstemp<P: AsRef<std::path::Path>>(tmpl: P) -> i32 {
+    #[cfg(windows)]
+    use ffi::g_mkstemp_utf8 as g_mkstemp;
+    #[cfg(not(windows))]
+    use ffi::g_mkstemp;
 
-pub fn reload_user_special_dirs_cache() {
     unsafe {
-        ffi::g_reload_user_special_dirs_cache()
-    }
-}
-
-pub fn get_host_name() -> Option<String> {
-    unsafe {
-        from_glib_none(ffi::g_get_host_name())
-    }
-}
-
-pub fn get_home_dir() -> Option<String> {
-    unsafe {
-        from_glib_none(ffi::g_get_home_dir())
-    }
-}
-
-pub fn get_tmp_dir() -> Option<String> {
-    unsafe {
-        from_glib_none(ffi::g_get_tmp_dir())
-    }
-}
-
-#[cfg(unix)]
-pub fn get_current_dir() -> Option<String> {
-    unsafe {
-        from_glib_none(ffi::g_get_current_dir())
-    }
-}
-
-pub fn path_is_absolute(file_name: &str) -> bool {
-    unsafe {
-        from_glib(ffi::g_path_is_absolute(file_name.to_glib_none().0))
-    }
-}
-
-pub fn path_skip_root(file_name: &str) -> Option<String> {
-    unsafe {
-        from_glib_none(ffi::g_path_skip_root(file_name.to_glib_none().0))
-    }
-}
-
-pub fn path_get_basename(file_name: &str) -> Option<String> {
-    unsafe {
-        from_glib_full(ffi::g_path_get_basename(file_name.to_glib_none().0))
-    }
-}
-
-pub fn path_get_dirname(file_name: &str) -> Option<String> {
-    unsafe {
-        from_glib_full(ffi::g_path_get_dirname(file_name.to_glib_none().0))
-    }
-}
-
-pub fn find_program_in_path(program: &str) -> Option<String> {
-    unsafe {
-        from_glib_full(ffi::g_find_program_in_path(program.to_glib_none().0))
+        g_mkstemp(tmpl.as_ref().to_glib_none().0)
     }
 }

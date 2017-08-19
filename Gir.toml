@@ -7,8 +7,17 @@ target_path = "."
 work_mode = "normal"
 
 generate = [
+    "GLib.DateDay",
+    "GLib.DateMonth",
+    "GLib.DateTime",
+    "GLib.DateWeekday",
+    "GLib.DateYear",
+    "GLib.FormatSizeFlags",
     "GLib.KeyFileError",
     "GLib.KeyFileFlags",
+    "GLib.Time",
+    "GLib.TimeType",
+    "GLib.TimeSpan",
 ]
 
 ignore = [
@@ -19,8 +28,209 @@ manual = [
     "GLib.Error",
     "GLib.Variant",
     "GLib.VariantType",
+    "GLib.UserDirectory",
     "GObject.Object",
 ]
+
+[[object]]
+name = "GLib.*"
+status = "generate"
+    [[object.function]]
+    name = "propagate_error"
+    #empty first parameter
+    ignore = true
+    [[object.function]]
+    name = "set_error_literal"
+    #empty first parameter
+    ignore = true
+    [[object.function]]
+    pattern = "atomic_.+"
+    ignore = true
+    [[object.function]]
+    pattern = "bit_.*lock"
+    ignore = true
+    [[object.function]]
+    name = "get_filename_charsets"
+    #string
+    ignore = true
+    [[object.function]]
+    pattern = "str.+v"
+    #string
+    ignore = true
+    [[object.function]]
+    name = "strv_length"
+    #string
+    ignore = true
+    [[object.function]]
+    name = "unix_open_pipe"
+    ignore = true
+    [[object.function]]
+    pattern = "str.+"
+    ignore = true
+    [[object.function]]
+    pattern = "ucs4_.+"
+    ignore = true
+    [[object.function]]
+    pattern = "utf16_.+"
+    ignore = true
+    [[object.function]]
+    pattern = "utf8_.+"
+    ignore = true
+    [[object.function]]
+    pattern = "unichar_.+"
+    ignore = true
+    [[object.function]]
+    pattern = "ascii_.+"
+    ignore = true
+    [[object.function]]
+    name = "assertion_message_error"
+    #Quark
+    ignore = true
+    [[object.function]]
+    pattern = ".+_error_quark"
+    #Quark
+    ignore = true
+    [[object.function]]
+    pattern = "quark_.+_string"
+    #Quark
+    ignore = true
+    [[object.function]]
+    name = "spawn_close_pid"
+    #Pid
+    ignore = true
+    [[object.function]]
+    name = "get_current_dir"
+    #manual
+    ignore = true
+    [[object.function]]
+    pattern = "[gs]et_prgname"
+    #manual pathbuf
+    ignore = true
+    [[object.function]]
+    name = "filename_from_utf8"
+    #not in 64bit lib for Windows
+    ignore = true
+    [[object.function]]
+    name = "get_user_name"
+    #manual pathbuf is_windows_utf8
+    ignore = true
+    [[object.function]]
+    pattern = "[gs]etenv"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "unsetenv"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "filename_to_uri"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "filename_from_uri"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "find_program_in_path"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "get_home_dir"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "get_real_name"
+    #manual pathbuf? is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "get_tmp_dir"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "mkstemp"
+    #manual is_windows_utf8
+    ignore = true
+    [[object.function]]
+    name = "strdup"
+    #not needed
+    ignore = true
+    [[object.function]]
+    pattern = "unix_.+"
+    cfg_condition = "unix"
+    [[object.function]]
+    name = "spawn_command_line_async"
+    cfg_condition = "unix"
+    [[object.function]]
+    name = "convert_with_fallback"
+    #out param not in .gir
+    ignore = true
+    [[object.function]]
+    name = "unicode_canonical_decomposition"
+    #out param not in .gir
+    ignore = true
+    [[object.function]]
+    name = "unicode_canonical_ordering"
+    #UCS-4 encoded string
+    ignore = true
+    [[object.function]]
+    name = "convert"
+    #gsize
+    ignore = true
+    [[object.function]]
+    name = "filename_to_utf8"
+    #gsize
+    ignore = true
+    [[object.function]]
+    name = "locale_from_utf8"
+    #gsize
+    ignore = true
+    [[object.function]]
+    name = "locale_to_utf8"
+    #gsize
+    ignore = true
+    [[object.function]]
+    name = "markup_escape_text"
+    #gsize
+    ignore = true
+    [[object.function]]
+    name = "child_watch_source_new"
+    # Need manual bindings to be useful
+    ignore = true
+    [[object.function]]
+    name = "idle_source_new"
+    # Need manual bindings to be useful
+    ignore = true
+    [[object.function]]
+    name = "timeout_source_new"
+    # Need manual bindings to be useful
+    ignore = true
+    [[object.function]]
+    name = "timeout_source_new_seconds"
+    # Need manual bindings to be useful
+    ignore = true
+    [[object.function]]
+    name = "unix_signal_source_new"
+    # Need manual bindings to be useful
+    ignore = true
+
+[[object]]
+name = "GLib.Checksum"
+status = "generate"
+    [[object.function]]
+    name = "get_digest"
+    #wrong array definition
+    ignore = true
+    [[object.function]]
+    name = "get_string"
+    #consume
+    ignore = true
+
+[[object]]
+name = "GLib.ChecksumType"
+status = "generate"
+    [[object.member]]
+    name = "sha512"
+    version = "2.36"
 
 [[object]]
 name = "GLib.KeyFile"
@@ -38,3 +248,60 @@ status = "generate"
        name = "save_to_file"
        # file parameter needs to be a PathBuf
        ignore = true
+       [[object.function]]
+       name = "set_locale_string_list"
+       #[&str] to *mut i8
+       ignore = true
+       [[object.function]]
+       name = "set_string_list"
+       #[&str] to *mut i8
+       ignore = true
+       [[object.function]]
+       name = "load_from_data"
+       #gsize
+       ignore = true
+       [[object.function]]
+       name = "set_double_list"
+       #wrong array type
+       ignore = true
+       [[object.function]]
+       name = "set_integer_list"
+       #wrong array type
+       ignore = true
+
+[[object]]
+name = "GLib.MainContext"
+status = "generate"
+concurrency = "send+sync"
+       [[object.function]]
+       name = "prepare"
+       # out parameter not marked as such
+       ignore = true
+
+       [[object.function]]
+       name = "find_source_by_id"
+       # source id is a newtype
+       ignore = true
+
+[[object]]
+name = "GLib.MainLoop"
+status = "generate"
+concurrency = "send+sync"
+
+[[object]]
+name = "GLib.Source"
+status = "generate"
+concurrency = "send+sync"
+        [[object.function]]
+        pattern = "set_.+"
+        # Setters are generally not thread-safe
+        # while GSource itself is
+        ignore = true
+
+[[object]]
+name = "GLib.TimeZone"
+status = "generate"
+    [[object.function]]
+    name = "adjust_time"
+    # in-out parameter
+    ignore = true

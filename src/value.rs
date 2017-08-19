@@ -76,8 +76,9 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::ffi::CStr;
+use std::ptr;
+use libc::c_void;
 
-use object::{Downcast, IsA, Object};
 use translate::*;
 use types::{StaticType, Type};
 
@@ -151,7 +152,8 @@ impl Value {
         }
     }
 
-    fn into_raw(mut self) -> gobject_ffi::GValue {
+    #[doc(hidden)]
+    pub fn into_raw(mut self) -> gobject_ffi::GValue {
         unsafe {
             let ret = mem::replace(&mut self.0, mem::uninitialized());
             mem::forget(self);
@@ -163,10 +165,8 @@ impl Value {
 impl Clone for Value {
     fn clone(&self) -> Self {
         unsafe {
-            // FIXME: make this safer by making GValue::g_type public
-            let type_ = *(&self.0 as *const gobject_ffi::GValue as *const glib_ffi::GType);
             let mut ret = Value::uninitialized();
-            gobject_ffi::g_value_init(ret.to_glib_none_mut().0, type_);
+            gobject_ffi::g_value_init(ret.to_glib_none_mut().0, self.0.g_type);
             gobject_ffi::g_value_copy(self.to_glib_none().0, ret.to_glib_none_mut().0);
             ret
         }
@@ -239,6 +239,161 @@ impl<'a> ToGlibPtr<'a, *mut gobject_ffi::GValue> for &'a [&'a ToValue] {
             .map(|v| v.to_value().into_raw())
             .collect();
         Stash(values.as_mut_ptr(), ValueArray(values))
+    }
+}
+
+impl<'a> ToGlibContainerFromSlice<'a, *mut gobject_ffi::GValue> for &'a Value {
+    type Storage = &'a [&'a Value];
+
+    fn to_glib_none_from_slice(t: &'a [&'a Value]) -> (*mut gobject_ffi::GValue, &'a [&'a Value]) {
+        (t.as_ptr() as *mut gobject_ffi::GValue, t)
+    }
+
+    fn to_glib_container_from_slice(t: &'a [&'a Value]) -> (*mut gobject_ffi::GValue, &'a [&'a Value]) {
+        if t.is_empty() {
+            return (ptr::null_mut(), t);
+        }
+
+        unsafe {
+            let res = glib_ffi::g_malloc(mem::size_of::<gobject_ffi::GValue>() * t.len()) as *mut gobject_ffi::GValue;
+            ptr::copy_nonoverlapping(t.as_ptr() as *const gobject_ffi::GValue, res, t.len());
+            (res, t)
+        }
+    }
+
+    fn to_glib_full_from_slice(t: &[&'a Value]) -> *mut gobject_ffi::GValue {
+        if t.is_empty() {
+            return ptr::null_mut();
+        }
+
+        unsafe {
+            let res = glib_ffi::g_malloc(mem::size_of::<gobject_ffi::GValue>() * t.len()) as *mut gobject_ffi::GValue;
+            for (i, v) in t.iter().enumerate() {
+                gobject_ffi::g_value_init(res.offset(i as isize), v.type_().to_glib());
+                gobject_ffi::g_value_copy(v.to_glib_none().0, res.offset(i as isize));
+            }
+            res
+        }
+    }
+}
+
+impl<'a> ToGlibContainerFromSlice<'a, *const gobject_ffi::GValue> for &'a Value {
+    type Storage = &'a [&'a Value];
+
+    fn to_glib_none_from_slice(t: &'a [&'a Value]) -> (*const gobject_ffi::GValue, &'a [&'a Value]) {
+        let (ptr, storage) = ToGlibContainerFromSlice::<'a, *mut gobject_ffi::GValue>::to_glib_none_from_slice(t);
+        (ptr as *const _, storage)
+    }
+
+    fn to_glib_container_from_slice(_: &'a [&'a Value]) -> (*const gobject_ffi::GValue, &'a [&'a Value]) {
+        unimplemented!()
+    }
+
+    fn to_glib_full_from_slice(_: &[&'a Value]) -> *const gobject_ffi::GValue {
+        unimplemented!()
+    }
+}
+
+impl FromGlibPtrNone<*const gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_none(ptr: *const gobject_ffi::GValue) -> Self {
+        let mut ret = Value::uninitialized();
+        gobject_ffi::g_value_init(ret.to_glib_none_mut().0, (*ptr).g_type);
+        gobject_ffi::g_value_copy(ptr, ret.to_glib_none_mut().0);
+        ret
+    }
+}
+
+impl FromGlibPtrNone<*mut gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_none(ptr: *mut gobject_ffi::GValue) -> Self {
+        from_glib_none(ptr as *const _)
+    }
+}
+
+impl FromGlibPtrFull<*mut gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_full(ptr: *mut gobject_ffi::GValue) -> Self {
+        let mut ret = Value::uninitialized();
+        ptr::swap(&mut ret.0, ptr);
+        glib_ffi::g_free(ptr as *mut c_void);
+        ret
+    }
+}
+
+impl FromGlibContainerAsVec<*mut gobject_ffi::GValue, *mut *mut gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_none_num_as_vec(ptr: *mut *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+        if num == 0 || ptr.is_null() {
+            return Vec::new();
+        }
+
+        let mut res = Vec::with_capacity(num);
+        for i in 0..num {
+            res.push(from_glib_none(ptr::read(ptr.offset(i as isize))));
+        }
+        res
+    }
+
+    unsafe fn from_glib_container_num_as_vec(ptr: *mut *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+        let res = FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, num);
+        glib_ffi::g_free(ptr as *mut _);
+        res
+    }
+
+    unsafe fn from_glib_full_num_as_vec(ptr: *mut *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+        if num == 0 || ptr.is_null() {
+            return Vec::new();
+        }
+
+        let mut res = Vec::with_capacity(num);
+        for i in 0..num {
+            res.push(from_glib_full(ptr::read(ptr.offset(i as isize))));
+        }
+        glib_ffi::g_free(ptr as *mut _);
+        res
+    }
+}
+
+impl FromGlibPtrArrayContainerAsVec<*mut gobject_ffi::GValue, *mut *mut gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_none_as_vec(ptr: *mut *mut gobject_ffi::GValue) -> Vec<Self> {
+        FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, c_ptr_array_len(ptr))
+    }
+
+    unsafe fn from_glib_container_as_vec(ptr: *mut *mut gobject_ffi::GValue) -> Vec<Self> {
+        FromGlibContainerAsVec::from_glib_container_num_as_vec(ptr, c_ptr_array_len(ptr))
+    }
+
+    unsafe fn from_glib_full_as_vec(ptr: *mut *mut gobject_ffi::GValue) -> Vec<Self> {
+        FromGlibContainerAsVec::from_glib_full_num_as_vec(ptr, c_ptr_array_len(ptr))
+    }
+}
+
+impl FromGlibContainerAsVec<*mut gobject_ffi::GValue, *const *mut gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_none_num_as_vec(ptr: *const *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+        FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr as *mut *mut _, num)
+    }
+
+    unsafe fn from_glib_container_num_as_vec(_: *const *mut gobject_ffi::GValue, _: usize) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+
+    unsafe fn from_glib_full_num_as_vec(_: *const *mut gobject_ffi::GValue, _: usize) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+}
+
+impl FromGlibPtrArrayContainerAsVec<*mut gobject_ffi::GValue, *const *mut gobject_ffi::GValue> for Value {
+    unsafe fn from_glib_none_as_vec(ptr: *const *mut gobject_ffi::GValue) -> Vec<Self> {
+        FromGlibPtrArrayContainerAsVec::from_glib_none_as_vec(ptr as *mut *mut _)
+    }
+
+    unsafe fn from_glib_container_as_vec(_: *const *mut gobject_ffi::GValue) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+
+    unsafe fn from_glib_full_as_vec(_: *const *mut gobject_ffi::GValue) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
     }
 }
 
@@ -490,25 +645,6 @@ impl SetValue for String {
 impl SetValueOptional for String {
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
         gobject_ffi::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
-    }
-}
-
-impl<'a, T: IsA<Object>> FromValueOptional<'a> for T {
-    unsafe fn from_value_optional(value: &Value) -> Option<Self> {
-        Option::<Object>::from_glib_full(gobject_ffi::g_value_dup_object(value.to_glib_none().0))
-            .map(|o| o.downcast_unchecked())
-    }
-}
-
-impl<T: IsA<Object>> SetValue for T {
-    unsafe fn set_value(value: &mut Value, this: &Self) {
-        gobject_ffi::g_value_set_object(value.to_glib_none_mut().0, this.to_glib_none().0)
-    }
-}
-
-impl<T: IsA<Object>> SetValueOptional for T {
-    unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
-        gobject_ffi::g_value_set_object(value.to_glib_none_mut().0, this.to_glib_none().0)
     }
 }
 
