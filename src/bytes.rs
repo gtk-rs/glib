@@ -3,12 +3,15 @@
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
 use ffi as glib_ffi;
+use gobject_ffi;
 use std::borrow::Borrow;
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::slice;
+use std::ptr;
+use std::mem;
 use translate::*;
 
 glib_wrapper! {
@@ -33,6 +36,7 @@ glib_wrapper! {
     match fn {
         ref => |ptr| glib_ffi::g_bytes_ref(ptr),
         unref => |ptr| glib_ffi::g_bytes_unref(ptr),
+        get_type => || glib_ffi::g_bytes_get_type(),
     }
 }
 

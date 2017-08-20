@@ -71,6 +71,8 @@
 //! conversions between high level Rust types (including the aforementioned
 //! wrappers) and their FFI counterparts.
 
+#![cfg_attr(feature = "cargo-clippy", allow(doc_markdown))]
+
 #[macro_use]
 extern crate bitflags;
 #[macro_use]
@@ -81,13 +83,15 @@ extern crate gobject_sys as gobject_ffi;
 
 use std::ffi::CStr;
 pub use bytes::Bytes;
-pub use error::Error;
+pub use closure::Closure;
+pub use error::{Error, BoolError};
 pub use file_error::FileError;
 pub use object::{
     Cast,
     IsA,
     Object,
     ObjectExt,
+    WeakRef,
 };
 pub use signal::{
     signal_handler_block,
@@ -95,15 +99,7 @@ pub use signal::{
     signal_stop_emission,
     signal_stop_emission_by_name
 };
-pub use source::{
-    CallbackGuard,
-    Continue,
-    idle_add,
-    timeout_add,
-    timeout_add_seconds,
-    source_remove,
-    Id as SourceId,
-};
+
 pub use types::{
     StaticType,
     Type,
@@ -128,6 +124,11 @@ pub use time_val::{
 };
 pub use enums::{
     UserDirectory,
+    EnumClass,
+    EnumValue,
+    FlagsClass,
+    FlagsValue,
+    FlagsBuilder,
 };
 
 lazy_static! {
@@ -171,20 +172,32 @@ pub mod shared;
 pub mod object;
 
 pub use auto::*;
+pub use auto::functions::*;
+#[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
+#[cfg_attr(feature = "cargo-clippy", allow(let_unit_value))]
+#[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
 mod auto;
 
 mod bytes;
+mod checksum;
+pub mod closure;
 pub mod error;
 mod enums;
 mod file_error;
 mod key_file;
 pub mod prelude;
 pub mod signal;
-mod source;
+pub mod source;
+pub use source::*;
 mod time_val;
 pub mod translate;
 pub mod types;
-pub mod utils;
+mod utils;
+pub use utils::*;
 pub mod value;
 pub mod variant;
 mod variant_type;
+mod main_context;
+mod date_time;
+mod date;
+pub use date::Date;

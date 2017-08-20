@@ -8,8 +8,11 @@ use std::ffi::CStr;
 use std::error;
 use std::fmt;
 use std::str;
+use std::ptr;
+use std::mem;
 use translate::*;
 use ffi as glib_ffi;
+use gobject_ffi;
 
 glib_wrapper! {
     /// A generic error capable of representing various error domains (types).
@@ -18,8 +21,12 @@ glib_wrapper! {
     match fn {
         copy => |ptr| glib_ffi::g_error_copy(ptr),
         free => |ptr| glib_ffi::g_error_free(ptr),
+        get_type => || glib_ffi::g_error_get_type(),
     }
 }
+
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
 
 impl Error {
     /// Creates an error with supplied error enum variant and message.
@@ -78,6 +85,7 @@ impl Error {
     }
 
     // backcompat shim
+    #[cfg_attr(feature = "cargo-clippy", allow(not_unsafe_ptr_arg_deref))]
     pub fn wrap(ptr: *mut glib_ffi::GError) -> Error {
         unsafe { from_glib_full(ptr) }
     }
@@ -112,4 +120,29 @@ pub trait ErrorDomain: Copy {
     /// By convention, the `Failed` variant, if present, is a catch-all,
     /// i.e. any unrecognized codes map to it.
     fn from(code: i32) -> Option<Self> where Self: Sized;
+}
+
+/// Generic error used for functions that fail without any further information
+#[derive(Debug)]
+pub struct BoolError(pub &'static str);
+
+impl BoolError {
+    pub fn from_glib(b: glib_ffi::gboolean, s: &'static str) -> Result<(), Self> {
+        match b {
+            glib_ffi::GFALSE => Err(BoolError(s)),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl fmt::Display for BoolError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl error::Error for BoolError {
+    fn description(&self) -> &str {
+        self.0
+    }
 }
