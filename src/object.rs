@@ -6,7 +6,7 @@
 
 use translate::*;
 use types::{self, StaticType};
-use wrapper::{UnsafeFrom, Wrapper};
+use wrapper::{UnsafeFrom, ClassWrapper, Wrapper};
 use ffi as glib_ffi;
 use gobject_ffi;
 use std::mem;
@@ -120,11 +120,15 @@ impl<T: IsA<Object>> Cast for T { }
 ///
 /// `T` always implements `IsA<T>`.
 pub trait IsA<T: StaticType + UnsafeFrom<ObjectRef> + Wrapper>: StaticType + Wrapper +
-    Into<ObjectRef> + UnsafeFrom<ObjectRef> +
+    Into<ObjectRef> + UnsafeFrom<ObjectRef> + /* Classed<<T as Wrapper>::ClassType> +*/
     for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> { }
 
+pub trait Classed<T: ClassWrapper + 'static>: Wrapper + 'static {
+    fn get_class(&self) -> &T;
+}
+
 impl<T> IsA<T> for T
-where T: StaticType + Wrapper + Into<ObjectRef> + UnsafeFrom<ObjectRef> +
+where T: StaticType + Wrapper + Into<ObjectRef> + UnsafeFrom<ObjectRef> + /* Classed<<T as Wrapper>::ClassType> + */
     for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> { }
 
 /// Downcasts support.
@@ -194,6 +198,13 @@ macro_rules! glib_object_wrapper {
         #[repr(C)]
         pub struct $class_name($ffi_class_name);
 
+
+        impl $class_name {
+            pub fn as_ptr(&self) -> *const $ffi_class_name {
+                &self.0
+            }
+        }
+
         #[doc(hidden)]
         impl Into<$crate::object::ObjectRef> for $name {
             fn into(self) -> $crate::object::ObjectRef {
@@ -221,6 +232,7 @@ macro_rules! glib_object_wrapper {
 
         #[doc(hidden)]
         impl $crate::wrapper::ClassWrapper for $class_name {
+            type InstanceType = $name;
             type GlibClassType = $ffi_class_name;
         }
 
@@ -469,6 +481,24 @@ macro_rules! glib_object_wrapper {
         impl ::std::cmp::Eq for $name { }
     };
 
+    (@impl_classed $name:ident, $parent_name:path) => {
+        #[doc(hidden)]
+        impl $crate::object::Classed<<$parent_name as $crate::wrapper::Wrapper>::ClassType> for $name {
+            fn get_class(&self) -> &<$parent_name as $crate::wrapper::Wrapper>::ClassType {
+                unimplemented!()
+            }
+        }
+    };
+
+    (@impl_classed_iface $name:ident, $iface_name:path) => {
+        #[doc(hidden)]
+        impl $crate::object::Classed<<$iface_name as $crate::wrapper::Wrapper>::ClassType> for $name {
+            fn get_class(&self) -> &<$iface_name as $crate::wrapper::Wrapper>::ClassType {
+                unimplemented!()
+            }
+        }
+    };
+
     (@impl_to_glib_ptr $name:ident, $is_a_name:path) => {
         #[doc(hidden)]
         impl<'a> $crate::translate::ToGlibPtr<'a,
@@ -525,11 +555,13 @@ macro_rules! glib_object_wrapper {
     (@munch_parents $name:ident, $parent_name:path) => {
         glib_object_wrapper!(@impl_to_glib_ptr $name, $parent_name);
         glib_object_wrapper!(@impl_is_a $name, $parent_name);
+        glib_object_wrapper!(@impl_classed $name, $parent_name);
     };
 
     (@munch_parents $name:ident, $parent_name:path => $parent_ffi:path) => {
         glib_object_wrapper!(@impl_to_glib_ptr $name, $parent_name, $parent_ffi);
         glib_object_wrapper!(@impl_is_a $name, $parent_name);
+        glib_object_wrapper!(@impl_classed $name, $parent_name);
     };
 
     (@munch_parents $name:ident, $parent_name:path, $($parents:tt)*) => {
@@ -547,11 +579,13 @@ macro_rules! glib_object_wrapper {
     (@munch_ifaces $name:ident, $iface_name:path) => {
         glib_object_wrapper!(@impl_to_glib_ptr $name, $iface_name);
         glib_object_wrapper!(@impl_is_a $name, $iface_name);
+        glib_object_wrapper!(@impl_classed_iface $name, $iface_name);
     };
 
     (@munch_ifaces $name:ident, $iface_name:path => $iface_ffi:path) => {
         glib_object_wrapper!(@impl_to_glib_ptr $name, $iface_name, $iface_ffi);
         glib_object_wrapper!(@impl_is_a $name, $iface_name);
+        glib_object_wrapper!(@impl_classed_iface $name, $iface_name);
     };
 
     (@munch_ifaces $name:ident, $iface_name:path, $($ifaces:tt)*) => {
@@ -564,17 +598,32 @@ macro_rules! glib_object_wrapper {
         glib_object_wrapper!(@munch_ifaces $name, $($ifaces)*);
     };
 
-    ([$($attr:meta)*] $name:ident, $ffi_name:path, $class_name: ident, $ffi_class_name:path, @get_type $get_type_expr:expr, [$($parents:tt)*], [$($ifaces:tt)*]) => {
+    ([$($attr:meta)*] $name:ident, Object, $ffi_name:path, $class_name: ident, $ffi_class_name:path, @get_type $get_type_expr:expr, [$($parents:tt)*], [$($ifaces:tt)*]) => {
         glib_object_wrapper!([$($attr)*] $name, $ffi_name, $class_name, $ffi_class_name, @get_type $get_type_expr);
+        glib_object_wrapper!(@impl_classed $name, $name);
+
         glib_object_wrapper!(@munch_parents $name, $($parents)*);
         glib_object_wrapper!(@munch_ifaces $name, $($ifaces)*);
 
         glib_object_wrapper!(@impl_is_a $name, $crate::object::Object);
         glib_object_wrapper!(@impl_to_glib_ptr $name, $crate::object::Object, $crate::object::GObject);
+        glib_object_wrapper!(@impl_classed $name, $crate::object::Object);
     };
 
-    ([$($attr:meta)*] $name:ident, $ffi_name:path, $class_name:ident, $ffi_class_name:path, @get_type $get_type_expr:expr, [$($parents:path),*], [$($ifaces:path),*]) => {
-        glib_object_wrapper!([$($attr)*] $name, $ffi_name, $class_name, $ffi_class_name, @get_type $get_type_expr, [$($parents),*], [$($ifaces),*]);
+    ([$($attr:meta)*] $name:ident, Interface, $ffi_name:path, $iface_name: ident, $ffi_iface_name:path, @get_type $get_type_expr:expr, [$($parents:tt)*], [$($ifaces:tt)*]) => {
+        glib_object_wrapper!([$($attr)*] $name, $ffi_name, $iface_name, $ffi_iface_name, @get_type $get_type_expr);
+        glib_object_wrapper!(@impl_classed_iface $name, $name);
+
+        glib_object_wrapper!(@munch_parents $name, $($parents)*);
+        glib_object_wrapper!(@munch_ifaces $name, $($ifaces)*);
+
+        glib_object_wrapper!(@impl_is_a $name, $crate::object::Object);
+        glib_object_wrapper!(@impl_to_glib_ptr $name, $crate::object::Object, $crate::object::GObject);
+        glib_object_wrapper!(@impl_classed $name, $crate::object::Object);
+    };
+
+    ([$($attr:meta)*] $name:ident, $kind:ident, $ffi_name:path, $class_name:ident, $ffi_class_name:path, @get_type $get_type_expr:expr, [$($parents:path),*], [$($ifaces:path),*]) => {
+        glib_object_wrapper!([$($attr)*] $name, $kind, $ffi_name, $class_name, $ffi_class_name, @get_type $get_type_expr, [$($parents),*], [$($ifaces),*]);
     }
 }
 
@@ -582,6 +631,7 @@ glib_object_wrapper! {
     [doc = "The base class in the object hierarchy."]
     Object, GObject, ObjectClass, GObjectClass, @get_type gobject_ffi::g_object_get_type()
 }
+glib_object_wrapper!(@impl_classed Object, Object);
 
 pub trait ObjectExt: IsA<Object> {
     fn get_type(&self) -> Type;
@@ -606,9 +656,9 @@ pub trait ObjectExt: IsA<Object> {
 impl<T: IsA<Object> + SetValue> ObjectExt for T {
     fn get_type(&self) -> Type {
         unsafe {
-            let obj = self.to_glib_none().0;
-            let klass = (*obj).g_type_instance.g_class as *mut gobject_ffi::GTypeClass;
-            from_glib((*klass).g_type)
+            unimplemented!(); /*
+            let klass = self.get_class();
+            from_glib((*klass.as_ptr()).g_type_class.g_type)*/
         }
     }
 
@@ -694,15 +744,15 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
     fn get_property_type<'a, N: Into<&'a str>>(&self, property_name: N) -> Option<Type> {
         let property_name = property_name.into();
         unsafe {
-            let obj = self.to_glib_none().0;
-            let klass = (*obj).g_type_instance.g_class as *mut gobject_ffi::GObjectClass;
+            unimplemented!(); /*
+            let klass = self.get_class();
 
-            let pspec = gobject_ffi::g_object_class_find_property(klass, property_name.to_glib_none().0);
+            let pspec = gobject_ffi::g_object_class_find_property(mut_override(klass.as_ptr()), property_name.to_glib_none().0);
             if pspec.is_null() {
                 None
             } else {
                 Some(from_glib((*pspec).value_type))
-            }
+            }*/
         }
     }
 
