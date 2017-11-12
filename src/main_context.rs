@@ -54,16 +54,18 @@ impl MainContext {
 
 #[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
 unsafe extern "C" fn trampoline(func: gpointer) -> gboolean {
-    let _guard = CallbackGuard::new();
+    let guard = CallbackGuard::new();
     let func: &RefCell<Box<FnMut() + 'static>> = transmute(func);
     (&mut *func.borrow_mut())();
+    guard.defuse();
 
     glib_ffi::G_SOURCE_REMOVE
 }
 
 unsafe extern "C" fn destroy_closure(ptr: gpointer) {
-    let _guard = CallbackGuard::new();
+    let guard = CallbackGuard::new();
     Box::<RefCell<Box<FnMut() + 'static>>>::from_raw(ptr as *mut _);
+    guard.defuse();
 }
 
 fn into_raw<F: FnMut() + Send + 'static>(func: F) -> gpointer {
