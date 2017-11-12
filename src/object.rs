@@ -469,129 +469,98 @@ macro_rules! glib_object_wrapper {
         impl ::std::cmp::Eq for $name { }
     };
 
+    (@impl_to_glib_ptr $name:ident, $is_a_name:path) => {
+        #[doc(hidden)]
+        impl<'a> $crate::translate::ToGlibPtr<'a,
+                *mut <$is_a_name as $crate::wrapper::Wrapper>::GlibType> for $name {
+            type Storage = <$crate::object::ObjectRef as
+                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
+
+            #[inline]
+            fn to_glib_none(&'a self) -> $crate::translate::Stash<'a,
+                    *mut <$is_a_name as $crate::wrapper::Wrapper>::GlibType, Self> {
+                let stash = self.0.to_glib_none();
+                debug_assert!($crate::types::instance_of::<$is_a_name>(stash.0 as *const _));
+                $crate::translate::Stash(stash.0 as *mut _, stash.1)
+            }
+
+            #[inline]
+            fn to_glib_full(&self)
+                    -> *mut <$is_a_name as $crate::wrapper::Wrapper>::GlibType {
+                let ptr = self.0.to_glib_full();
+                debug_assert!($crate::types::instance_of::<$is_a_name>(ptr as *const _));
+                ptr as *mut _
+            }
+        }
+    };
+
+    (@impl_to_glib_ptr $name:ident, $is_a_name:path, $is_a_ffi_name:path) => {
+        #[doc(hidden)]
+        impl<'a> $crate::translate::ToGlibPtr<'a, *mut $is_a_ffi_name> for $name {
+            type Storage = <$crate::object::ObjectRef as
+                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
+
+            #[inline]
+            fn to_glib_none(&'a self) -> $crate::translate::Stash<'a, *mut $is_a_ffi_name, Self> {
+                let stash = self.0.to_glib_none();
+                debug_assert!($crate::types::instance_of::<$is_a_name>(stash.0 as *const _));
+                $crate::translate::Stash(stash.0 as *mut _, stash.1)
+            }
+
+            #[inline]
+            fn to_glib_full(&self) -> *mut $is_a_ffi_name {
+                let ptr = self.0.to_glib_full();
+                debug_assert!($crate::types::instance_of::<$is_a_name>(ptr as *const _));
+                ptr as *mut _
+            }
+        }
+    };
+
+    (@impl_is_a $name:ident, $is_a_name:path) => {
+        impl $crate::object::IsA<$is_a_name> for $name { }
+    };
+
     (@munch_parents $name:ident, ) => { };
+
+    (@munch_parents $name:ident, $parent_name:path) => {
+        glib_object_wrapper!(@impl_to_glib_ptr $name, $parent_name);
+        glib_object_wrapper!(@impl_is_a $name, $parent_name);
+    };
+
+    (@munch_parents $name:ident, $parent_name:path => $parent_ffi:path) => {
+        glib_object_wrapper!(@impl_to_glib_ptr $name, $parent_name, $parent_ffi);
+        glib_object_wrapper!(@impl_is_a $name, $parent_name);
+    };
+
+    (@munch_parents $name:ident, $parent_name:path, $($parents:tt)*) => {
+        glib_object_wrapper!(@munch_parents $name, $parent_name);
+        glib_object_wrapper!(@munch_parents $name, $($parents)*);
+    };
+
+    (@munch_parents $name:ident, $parent_name:path => $parent_ffi:path, $($parents:tt)*) => {
+        glib_object_wrapper!(@munch_parents $name, $parent_name => $parent_ffi);
+        glib_object_wrapper!(@munch_parents $name, $($parents)*);
+    };
 
     (@munch_ifaces $name:ident, ) => { };
 
-    (@munch_parents $name:ident, $super_name:path) => {
-        #[doc(hidden)]
-        impl<'a> $crate::translate::ToGlibPtr<'a,
-                *mut <$super_name as $crate::wrapper::Wrapper>::GlibType> for $name {
-            type Storage = <$crate::object::ObjectRef as
-                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
-
-            #[inline]
-            fn to_glib_none(&'a self) -> $crate::translate::Stash<'a,
-                    *mut <$super_name as $crate::wrapper::Wrapper>::GlibType, Self> {
-                let stash = self.0.to_glib_none();
-                debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
-                $crate::translate::Stash(stash.0 as *mut _, stash.1)
-            }
-
-            #[inline]
-            fn to_glib_full(&self)
-                    -> *mut <$super_name as $crate::wrapper::Wrapper>::GlibType {
-                let ptr = self.0.to_glib_full();
-                debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
-                ptr as *mut _
-            }
-        }
-
-        impl $crate::object::IsA<$super_name> for $name { }
+    (@munch_ifaces $name:ident, $iface_name:path) => {
+        glib_object_wrapper!(@impl_to_glib_ptr $name, $iface_name);
+        glib_object_wrapper!(@impl_is_a $name, $iface_name);
     };
 
-    (@munch_parents $name:ident, $super_name:path => $super_ffi:path) => {
-        #[doc(hidden)]
-        impl<'a> $crate::translate::ToGlibPtr<'a, *mut $super_ffi> for $name {
-            type Storage = <$crate::object::ObjectRef as
-                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
-
-            #[inline]
-            fn to_glib_none(&'a self) -> $crate::translate::Stash<'a, *mut $super_ffi, Self> {
-                let stash = self.0.to_glib_none();
-                debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
-                $crate::translate::Stash(stash.0 as *mut _, stash.1)
-            }
-
-            #[inline]
-            fn to_glib_full(&self) -> *mut $super_ffi {
-                let ptr = self.0.to_glib_full();
-                debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
-                ptr as *mut _
-            }
-        }
-
-        impl $crate::object::IsA<$super_name> for $name { }
+    (@munch_ifaces $name:ident, $iface_name:path => $iface_ffi:path) => {
+        glib_object_wrapper!(@impl_to_glib_ptr $name, $iface_name, $iface_ffi);
+        glib_object_wrapper!(@impl_is_a $name, $iface_name);
     };
 
-    (@munch_ifaces $name:ident, $super_name:path) => {
-        #[doc(hidden)]
-        impl<'a> $crate::translate::ToGlibPtr<'a,
-                *mut <$super_name as $crate::wrapper::Wrapper>::GlibType> for $name {
-            type Storage = <$crate::object::ObjectRef as
-                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
-
-            #[inline]
-            fn to_glib_none(&'a self) -> $crate::translate::Stash<'a,
-                    *mut <$super_name as $crate::wrapper::Wrapper>::GlibType, Self> {
-                let stash = self.0.to_glib_none();
-                debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
-                $crate::translate::Stash(stash.0 as *mut _, stash.1)
-            }
-
-            #[inline]
-            fn to_glib_full(&self)
-                    -> *mut <$super_name as $crate::wrapper::Wrapper>::GlibType {
-                let ptr = self.0.to_glib_full();
-                debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
-                ptr as *mut _
-            }
-        }
-
-        impl $crate::object::IsA<$super_name> for $name { }
-    };
-
-    (@munch_ifaces $name:ident, $super_name:path => $super_ffi:path) => {
-        #[doc(hidden)]
-        impl<'a> $crate::translate::ToGlibPtr<'a, *mut $super_ffi> for $name {
-            type Storage = <$crate::object::ObjectRef as
-                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
-
-            #[inline]
-            fn to_glib_none(&'a self) -> $crate::translate::Stash<'a, *mut $super_ffi, Self> {
-                let stash = self.0.to_glib_none();
-                debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
-                $crate::translate::Stash(stash.0 as *mut _, stash.1)
-            }
-
-            #[inline]
-            fn to_glib_full(&self) -> *mut $super_ffi {
-                let ptr = self.0.to_glib_full();
-                debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
-                ptr as *mut _
-            }
-        }
-
-        impl $crate::object::IsA<$super_name> for $name { }
-    };
-
-    (@munch_parents $name:ident, $super_name:path, $($parents:tt)*) => {
-        glib_object_wrapper!(@munch_parents $name, $super_name);
-        glib_object_wrapper!(@munch_parents $name, $($parents)*);
-    };
-
-    (@munch_parents $name:ident, $super_name:path => $super_ffi:path, $($parents:tt)*) => {
-        glib_object_wrapper!(@munch_parents $name, $super_name => $super_ffi);
-        glib_object_wrapper!(@munch_parents $name, $($parents)*);
-    };
-
-    (@munch_ifaces $name:ident, $super_name:path, $($ifaces:tt)*) => {
-        glib_object_wrapper!(@munch_ifaces $name, $super_name);
+    (@munch_ifaces $name:ident, $iface_name:path, $($ifaces:tt)*) => {
+        glib_object_wrapper!(@munch_ifaces $name, $iface_name);
         glib_object_wrapper!(@munch_ifaces $name, $($ifaces)*);
     };
 
-    (@munch_ifaces $name:ident, $super_name:path => $super_ffi:path, $($ifaces:tt)*) => {
-        glib_object_wrapper!(@munch_ifaces $name, $super_name => $super_ffi);
+    (@munch_ifaces $name:ident, $iface_name:path => $iface_ffi:path, $($ifaces:tt)*) => {
+        glib_object_wrapper!(@munch_ifaces $name, $iface_name, $iface_ffi);
         glib_object_wrapper!(@munch_ifaces $name, $($ifaces)*);
     };
 
@@ -600,25 +569,8 @@ macro_rules! glib_object_wrapper {
         glib_object_wrapper!(@munch_parents $name, $($parents)*);
         glib_object_wrapper!(@munch_ifaces $name, $($ifaces)*);
 
-        #[doc(hidden)]
-        impl<'a> $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject> for $name {
-            type Storage = <$crate::object::ObjectRef as
-                $crate::translate::ToGlibPtr<'a, *mut $crate::object::GObject>>::Storage;
-
-            #[inline]
-            fn to_glib_none(&'a self)
-                    -> $crate::translate::Stash<'a, *mut $crate::object::GObject, Self> {
-                let stash = self.0.to_glib_none();
-                $crate::translate::Stash(stash.0 as *mut _, stash.1)
-            }
-
-            #[inline]
-            fn to_glib_full(&self) -> *mut $crate::object::GObject {
-                (&self.0).to_glib_full() as *mut _
-            }
-        }
-
-        impl $crate::object::IsA<$crate::object::Object> for $name { }
+        glib_object_wrapper!(@impl_is_a $name, $crate::object::Object);
+        glib_object_wrapper!(@impl_to_glib_ptr $name, $crate::object::Object, $crate::object::GObject);
     };
 
     ([$($attr:meta)*] $name:ident, $ffi_name:path, $class_name:ident, $ffi_class_name:path, @get_type $get_type_expr:expr, [$($parents:path),*], [$($ifaces:path),*]) => {
