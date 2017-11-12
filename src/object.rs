@@ -121,11 +121,13 @@ impl<T: IsA<Object>> Cast for T { }
 /// `T` always implements `IsA<T>`.
 pub trait IsA<T: StaticType + UnsafeFrom<ObjectRef> + Wrapper>: StaticType + Wrapper +
     Into<ObjectRef> + UnsafeFrom<ObjectRef> +
-    for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> { }
+    for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> +
+    for<'a> ToGlibPtr<'a, *const <T as Wrapper>::GlibType> { }
 
 impl<T> IsA<T> for T
 where T: StaticType + Wrapper + Into<ObjectRef> + UnsafeFrom<ObjectRef> +
-    for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> { }
+    for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> +
+    for<'a> ToGlibPtr<'a, *const <T as Wrapper>::GlibType> { }
 
 /// Downcasts support.
 pub trait Downcast<T> {
