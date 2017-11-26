@@ -16,7 +16,7 @@ use Source;
 /// The id of a source that is returned by `idle_add` and `timeout_add`.
 ///
 /// A value of 0 is a good default as it is never a valid source ID.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct SourceId(u32);
 
 impl ToGlib for SourceId {
@@ -71,8 +71,12 @@ impl Default for CallbackGuard {
 
 impl Drop for CallbackGuard {
     fn drop(&mut self) {
+        use std::io::stderr;
+        use std::io::Write;
+
         if thread::panicking() {
-            process::exit(101);
+            let _ = stderr().write(b"Uncaught panic, exiting\n");
+            process::abort();
         }
     }
 }
@@ -175,7 +179,7 @@ where F: FnMut(u32, i32) + Send + 'static {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, feature = "dox"))]
 /// Adds a closure to be called by the default main loop whenever a UNIX signal is raised.
 ///
 /// `func` will be called repeatedly every time `signum` is raised until it
@@ -316,7 +320,7 @@ where F: FnMut(u32, i32) + Send + 'static {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, feature = "dox"))]
 /// Adds a closure to be called by the main loop the returned `Source` is attached to whenever a
 /// UNIX signal is raised.
 ///

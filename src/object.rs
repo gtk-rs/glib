@@ -11,13 +11,15 @@ use ffi as glib_ffi;
 use gobject_ffi;
 use std::mem;
 use std::ptr;
+use std::iter;
 use std::marker::PhantomData;
 
 use Value;
-use value::SetValue;
+use value::{ToValue, SetValue};
 use Type;
 use BoolError;
 use Closure;
+use SignalHandlerId;
 
 /// Upcasting and downcasting support.
 ///
@@ -69,7 +71,9 @@ pub trait Cast: IsA<Object> {
     /// Returns `true` if the object is an instance of (can be cast to) `T`.
     fn is<T>(&self) -> bool
     where T: StaticType {
-        types::instance_of::<T>(self.to_glib_none().0 as *const _)
+        unsafe {
+            types::instance_of::<T>(self.to_glib_none().0 as *const _)
+        }
     }
 
     /// Tries to cast to an object of type `T`. This handles upcasting, downcasting
@@ -117,11 +121,11 @@ impl<T: IsA<Object>> Cast for T { }
 /// implementations exist.
 ///
 /// `T` always implements `IsA<T>`.
-pub trait IsA<T: StaticType + UnsafeFrom<ObjectRef> + Wrapper>: StaticType + Wrapper +
+pub unsafe trait IsA<T: StaticType + UnsafeFrom<ObjectRef> + Wrapper>: StaticType + Wrapper +
     Into<ObjectRef> + UnsafeFrom<ObjectRef> +
     for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> { }
 
-impl<T> IsA<T> for T
+unsafe impl<T> IsA<T> for T
 where T: StaticType + Wrapper + Into<ObjectRef> + UnsafeFrom<ObjectRef> +
     for<'a> ToGlibPtr<'a, *mut <T as Wrapper>::GlibType> { }
 
@@ -144,7 +148,9 @@ pub trait Downcast<T> {
 impl<Super: IsA<Super>, Sub: IsA<Super>> Downcast<Sub> for Super {
     #[inline]
     fn can_downcast(&self) -> bool {
-        types::instance_of::<Sub>(self.to_glib_none().0 as *const _)
+        unsafe {
+            types::instance_of::<Sub>(self.to_glib_none().0 as *const _)
+        }
     }
 
     #[inline]
@@ -167,6 +173,9 @@ impl<Super: IsA<Super>, Sub: IsA<Super>> Downcast<Sub> for Super {
 #[doc(hidden)]
 pub use gobject_ffi::GObject;
 
+#[doc(hidden)]
+pub use gobject_ffi::GObjectClass;
+
 glib_wrapper! {
     #[doc(hidden)]
     #[derive(Debug, PartialEq, Eq, Hash)]
@@ -181,7 +190,7 @@ glib_wrapper! {
 /// Wrapper implementations for Object types. See `glib_wrapper!`.
 #[macro_export]
 macro_rules! glib_object_wrapper {
-    ([$($attr:meta)*] $name:ident, $ffi_name:path, @get_type $get_type_expr:expr) => {
+    ([$($attr:meta)*] $name:ident, $ffi_name:path, $ffi_class_name:path, @get_type $get_type_expr:expr) => {
         $(#[$attr])*
         #[derive(Clone, Debug, Hash)]
         pub struct $name($crate::object::ObjectRef, ::std::marker::PhantomData<$ffi_name>);
@@ -208,6 +217,7 @@ macro_rules! glib_object_wrapper {
         #[doc(hidden)]
         impl $crate::wrapper::Wrapper for $name {
             type GlibType = $ffi_name;
+            type GlibClassType = $ffi_class_name;
         }
 
         #[doc(hidden)]
@@ -468,7 +478,9 @@ macro_rules! glib_object_wrapper {
             fn to_glib_none(&'a self) -> $crate::translate::Stash<'a,
                     *mut <$super_name as $crate::wrapper::Wrapper>::GlibType, Self> {
                 let stash = self.0.to_glib_none();
-                debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
+                unsafe {
+                    debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
+                }
                 $crate::translate::Stash(stash.0 as *mut _, stash.1)
             }
 
@@ -476,12 +488,14 @@ macro_rules! glib_object_wrapper {
             fn to_glib_full(&self)
                     -> *mut <$super_name as $crate::wrapper::Wrapper>::GlibType {
                 let ptr = self.0.to_glib_full();
-                debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
+                unsafe {
+                    debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
+                }
                 ptr as *mut _
             }
         }
 
-        impl $crate::object::IsA<$super_name> for $name { }
+        unsafe impl $crate::object::IsA<$super_name> for $name { }
     };
 
     (@munch_impls $name:ident, $super_name:path => $super_ffi:path) => {
@@ -493,19 +507,23 @@ macro_rules! glib_object_wrapper {
             #[inline]
             fn to_glib_none(&'a self) -> $crate::translate::Stash<'a, *mut $super_ffi, Self> {
                 let stash = self.0.to_glib_none();
-                debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
+                unsafe {
+                    debug_assert!($crate::types::instance_of::<$super_name>(stash.0 as *const _));
+                }
                 $crate::translate::Stash(stash.0 as *mut _, stash.1)
             }
 
             #[inline]
             fn to_glib_full(&self) -> *mut $super_ffi {
                 let ptr = self.0.to_glib_full();
-                debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
+                unsafe {
+                    debug_assert!($crate::types::instance_of::<$super_name>(ptr as *const _));
+                }
                 ptr as *mut _
             }
         }
 
-        impl $crate::object::IsA<$super_name> for $name { }
+        unsafe impl $crate::object::IsA<$super_name> for $name { }
     };
 
     (@munch_impls $name:ident, $super_name:path, $($implements:tt)*) => {
@@ -518,9 +536,9 @@ macro_rules! glib_object_wrapper {
         glib_object_wrapper!(@munch_impls $name, $($implements)*);
     };
 
-    ([$($attr:meta)*] $name:ident, $ffi_name:path, @get_type $get_type_expr:expr,
+    ([$($attr:meta)*] $name:ident, $ffi_name:path, $ffi_class_name:path, @get_type $get_type_expr:expr,
      @implements $($implements:tt)*) => {
-        glib_object_wrapper!([$($attr)*] $name, $ffi_name, @get_type $get_type_expr);
+        glib_object_wrapper!([$($attr)*] $name, $ffi_name, $ffi_class_name, @get_type $get_type_expr);
         glib_object_wrapper!(@munch_impls $name, $($implements)*);
 
         #[doc(hidden)]
@@ -541,32 +559,37 @@ macro_rules! glib_object_wrapper {
             }
         }
 
-        impl $crate::object::IsA<$crate::object::Object> for $name { }
+        unsafe impl $crate::object::IsA<$crate::object::Object> for $name { }
     };
 
-    ([$($attr:meta)*] $name:ident, $ffi_name:path, @get_type $get_type_expr:expr,
+    ([$($attr:meta)*] $name:ident, $ffi_name:path, $ffi_class_name:path, @get_type $get_type_expr:expr,
      [$($implements:path),*]) => {
-        glib_object_wrapper!([$($attr)*] $name, $ffi_name, @get_type $get_type_expr,
+        glib_object_wrapper!([$($attr)*] $name, $ffi_name, $ffi_class_name, @get_type $get_type_expr,
             @implements $($implements),*);
     }
 }
 
 glib_object_wrapper! {
     [doc = "The base class in the object hierarchy."]
-    Object, GObject, @get_type gobject_ffi::g_object_get_type()
+    Object, GObject, GObjectClass, @get_type gobject_ffi::g_object_get_type()
 }
 
 pub trait ObjectExt: IsA<Object> {
     fn get_type(&self) -> Type;
 
-    fn set_property<'a, N: Into<&'a str>>(&self, property_name: N, value: &Value) -> Result<(), BoolError>;
+    fn set_property<'a, N: Into<&'a str>>(&self, property_name: N, value: &ToValue) -> Result<(), BoolError>;
     fn get_property<'a, N: Into<&'a str>>(&self, property_name: N) -> Result<Value, BoolError>;
     fn has_property<'a, N: Into<&'a str>>(&self, property_name: N, type_: Option<Type>) -> Result<(), BoolError>;
     fn get_property_type<'a, N: Into<&'a str>>(&self, property_name: N) -> Option<Type>;
 
-    fn connect<'a, N, F>(&self, signal_name: N, after: bool, callback: F) -> Result<u64, BoolError>
+    fn block_signal(&self, handler_id: &SignalHandlerId);
+    fn unblock_signal(&self, handler_id: &SignalHandlerId);
+    fn stop_signal_emission(&self, signal_name: &str);
+
+    fn connect<'a, N, F>(&self, signal_name: N, after: bool, callback: F) -> Result<SignalHandlerId, BoolError>
         where N: Into<&'a str>, F: Fn(&[Value]) -> Option<Value> + Send + Sync + 'static;
-    fn emit<'a, N: Into<&'a str>>(&self, signal_name: N, args: &[&Value]) -> Result<Option<Value>, BoolError>;
+    fn emit<'a, N: Into<&'a str>>(&self, signal_name: N, args: &[&ToValue]) -> Result<Option<Value>, BoolError>;
+    fn disconnect(&self, handler_id: SignalHandlerId);
 
     fn downgrade(&self) -> WeakRef<Self>;
 }
@@ -580,13 +603,14 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
         }
     }
 
-    fn set_property<'a, N: Into<&'a str>>(&self, property_name: N, value: &Value) -> Result<(), BoolError> {
+    fn set_property<'a, N: Into<&'a str>>(&self, property_name: N, value: &ToValue) -> Result<(), BoolError> {
         let property_name = property_name.into();
 
-        if let Err(error) = self.has_property(property_name, Some(value.type_())) {
+        if let Err(error) = self.has_property(property_name, Some(value.to_value_type())) {
             return Err(error);
         }
 
+        let value = value.to_value();
         unsafe {
             gobject_ffi::g_object_set_property(self.to_glib_none().0, property_name.to_glib_none().0, value.to_glib_none().0)
         }
@@ -614,6 +638,30 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
             } else {
                 Ok(value)
             }
+        }
+    }
+
+    fn block_signal(&self, handler_id: &SignalHandlerId) {
+        unsafe {
+            gobject_ffi::g_signal_handler_block(self.to_glib_none().0, handler_id.to_glib());
+        }
+    }
+
+    fn unblock_signal(&self, handler_id: &SignalHandlerId) {
+        unsafe {
+            gobject_ffi::g_signal_handler_unblock(self.to_glib_none().0, handler_id.to_glib());
+        }
+    }
+
+    fn stop_signal_emission(&self, signal_name: &str) {
+        unsafe {
+            gobject_ffi::g_signal_stop_emission_by_name(self.to_glib_none().0, signal_name.to_glib_none().0);
+        }
+    }
+
+    fn disconnect(&self, handler_id: SignalHandlerId) {
+        unsafe {
+            gobject_ffi::g_signal_handler_disconnect(self.to_glib_none().0, handler_id.to_glib());
         }
     }
 
@@ -649,7 +697,7 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
         }
     }
 
-    fn connect<'a, N, F>(&self, signal_name: N, after: bool, callback: F) -> Result<u64, BoolError>
+    fn connect<'a, N, F>(&self, signal_name: N, after: bool, callback: F) -> Result<SignalHandlerId, BoolError>
         where N: Into<&'a str>, F: Fn(&[Value]) -> Option<Value> + Send + Sync + 'static {
         let signal_name: &str = signal_name.into();
 
@@ -674,26 +722,28 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
             }
 
             // This is actually G_SIGNAL_TYPE_STATIC_SCOPE
-            let return_type = details.return_type & (!gobject_ffi::G_TYPE_FLAG_RESERVED_ID_BIT);
+            let return_type: Type = from_glib(details.return_type & (!gobject_ffi::G_TYPE_FLAG_RESERVED_ID_BIT));
             let closure = Closure::new(move |values| {
                 let ret = callback(values);
 
-                if return_type == gobject_ffi::G_TYPE_NONE {
-                    // Silently drop return value, if any
-                    None
-                } else if let Some(ret) = ret {
-                    if ret.type_().to_glib() == return_type {
-                        Some(ret)
-                    } else {
-                        let mut value = Value::uninitialized();
-                        gobject_ffi::g_value_init(value.to_glib_none_mut().0, return_type);
-                        Some(value)
+                if return_type == Type::Unit {
+                    if let Some(ret) = ret {
+                        panic!("Signal required no return value but got value of type {}", ret.type_().name());
                     }
+                    None
                 } else {
-                    // Silently create empty return value
-                    let mut value = Value::uninitialized();
-                    gobject_ffi::g_value_init(value.to_glib_none_mut().0, return_type);
-                    Some(value)
+                    match ret {
+                        Some(ret) => {
+                            if !ret.type_().is_a(&return_type) {
+                                panic!("Signal required return value of type {} but got {}",
+                                       return_type.name(), ret.type_().name());
+                            }
+                            Some(ret)
+                        },
+                        None => {
+                            panic!("Signal required return value of type {} but got None", return_type.name());
+                        },
+                    }
                 }
             });
             let handler = gobject_ffi::g_signal_connect_closure_by_id(self.to_glib_none().0, signal_id, signal_detail,
@@ -702,12 +752,12 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
             if handler == 0 {
                 Err(BoolError("Failed to connect to signal"))
             } else {
-                Ok(handler as u64)
+                Ok(from_glib(handler))
             }
         }
     }
 
-    fn emit<'a, N: Into<&'a str>>(&self, signal_name: N, args: &[&Value]) -> Result<Option<Value>, BoolError> {
+    fn emit<'a, N: Into<&'a str>>(&self, signal_name: N, args: &[&ToValue]) -> Result<Option<Value>, BoolError> {
         let signal_name: &str = signal_name.into();
         unsafe {
             let type_ = self.get_type();
@@ -735,24 +785,33 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
 
             for i in 0..details.n_params {
                 let arg_type = *(details.param_types.offset(i as isize)) & (!gobject_ffi::G_TYPE_FLAG_RESERVED_ID_BIT);
-                if arg_type != args[i as usize].type_().to_glib() {
+                if arg_type != args[i as usize].to_value_type().to_glib() {
                     return Err(BoolError("Incompatible argument types"));
                 }
             }
 
-            let mut c_args: Vec<gobject_ffi::GValue> = Vec::new();
-            let instance = Value::from(self);
-            c_args.push(ptr::read(instance.to_glib_none().0));
-            for arg in args {
-                c_args.push(ptr::read(arg.to_glib_none().0));
-            }
+            let mut v_args: Vec<Value>;
+            let mut s_args: [Value; 10] = mem::zeroed();
+            let args = if args.len() < 10 {
+                for (i, arg) in iter::once(&(self as &ToValue)).chain(args).enumerate() {
+                    s_args[i] = arg.to_value();
+                }
+                &s_args[0..args.len()+1]
+            } else {
+                v_args = Vec::with_capacity(args.len() + 1);
+                for arg in iter::once(&(self as &ToValue)).chain(args) {
+                    v_args.push(arg.to_value());
+                }
+                v_args.as_slice()
+            };
 
             let mut return_value = Value::uninitialized();
             if details.return_type != gobject_ffi::G_TYPE_NONE {
                 gobject_ffi::g_value_init(return_value.to_glib_none_mut().0, details.return_type);
             }
 
-            gobject_ffi::g_signal_emitv(mut_override(c_args.as_ptr()), signal_id, signal_detail, return_value.to_glib_none_mut().0);
+            gobject_ffi::g_signal_emitv(mut_override(args.as_ptr()) as *mut gobject_ffi::GValue,
+                signal_id, signal_detail, return_value.to_glib_none_mut().0);
 
             if return_value.type_() != Type::Unit && return_value.type_() != Type::Invalid {
                 Ok(Some(return_value))
