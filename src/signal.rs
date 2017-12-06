@@ -88,7 +88,8 @@ pub fn signal_stop_emission_by_name<T: IsA<Object>>(instance: &T, signal_name: &
 }
 
 unsafe extern "C" fn destroy_closure(ptr: *mut c_void, _: *mut gobject_ffi::GClosure) {
-    let _guard = CallbackGuard::new();
+    let guard = CallbackGuard::new();
     // destroy
     Box::<Box<Fn()>>::from_raw(ptr as *mut _);
+    guard.defuse();
 }
