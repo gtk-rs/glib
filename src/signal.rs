@@ -13,7 +13,7 @@ use source::CallbackGuard;
 use translate::{from_glib, FromGlib, ToGlib, ToGlibPtr};
 
 /// The id of a signal that is returned by `connect`.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignalHandlerId(c_ulong);
 
 impl ToGlib for SignalHandlerId {
