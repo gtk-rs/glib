@@ -270,7 +270,7 @@ macro_rules! glib_object_wrapper {
                 let v: Vec<_> = t.iter().map(|s| s.to_glib_none()).collect();
 
                 let v_ptr = unsafe {
-                    let v_ptr = glib_ffi::g_malloc0(mem::size_of::<*mut $ffi_name>() * t.len() + 1) as *mut *mut $ffi_name;
+                    let v_ptr = glib_ffi::g_malloc0(mem::size_of::<*mut $ffi_name>() * (t.len() + 1)) as *mut *mut $ffi_name;
 
                     for (i, s) in v.iter().enumerate() {
                         ptr::write(v_ptr.offset(i as isize), s.0);
@@ -284,7 +284,7 @@ macro_rules! glib_object_wrapper {
 
             fn to_glib_full_from_slice(t: &[$name]) -> *mut *mut $ffi_name {
                 unsafe {
-                    let v_ptr = glib_ffi::g_malloc0(mem::size_of::<*mut $ffi_name>() * t.len() + 1) as *mut *mut $ffi_name;
+                    let v_ptr = glib_ffi::g_malloc0(mem::size_of::<*mut $ffi_name>() * (t.len() + 1)) as *mut *mut $ffi_name;
 
                     for (i, s) in t.iter().enumerate() {
                         ptr::write(v_ptr.offset(i as isize), s.to_glib_full());
@@ -627,9 +627,7 @@ impl<T: IsA<Object> + SetValue> ObjectExt for T {
         };
 
         unsafe {
-            let mut value = Value::uninitialized();
-
-            gobject_ffi::g_value_init(value.to_glib_none_mut().0, property_type.to_glib());
+            let mut value = Value::from_type(property_type);
             gobject_ffi::g_object_get_property(self.to_glib_none().0, property_name.to_glib_none().0, value.to_glib_none_mut().0);
 
             // This can't really happen unless something goes wrong inside GObject
