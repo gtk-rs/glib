@@ -5,7 +5,7 @@ homepage = "http://gtk-rs.org/"
 authors = ["The Gtk-rs Project Developers"]
 description = "Rust bindings for the GLib library"
 readme = "README.md"
-version = "0.4.1"
+version = "0.5.0"
 keywords = ["glib", "gtk-rs", "gnome", "GUI"]
 repository = "https://github.com/gtk-rs/glib"
 license = "MIT"
@@ -20,8 +20,8 @@ name = "glib"
 lazy_static = "1.0"
 libc = "0.2"
 bitflags = "1.0"
-gobject-sys = "0.5.0"
-glib-sys = "0.5.0"
+gobject-sys = "0.6.0"
+glib-sys = "0.6.0"
 
 [dev-dependencies]
 tempdir = "0.3"
