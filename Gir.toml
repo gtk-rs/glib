@@ -329,6 +329,16 @@ concurrency = "send+sync"
        # source id is a newtype
        ignore = true
 
+       [[object.function]]
+       name = "push_thread_default"
+       # panic-safe popping
+       ignore = true
+
+       [[object.function]]
+       name = "pop_thread_default"
+       # panic-safe popping
+       ignore = true
+
 [[object]]
 name = "GLib.MainLoop"
 status = "generate"

@@ -45,6 +45,27 @@ impl MainContext {
                 func as gpointer, Some(destroy_closure::<F>))
         }
     }
+
+    fn pop_thread_default(&self) {
+        unsafe {
+            ffi::g_main_context_pop_thread_default(self.to_glib_none().0);
+        }
+    }
+
+    pub fn push_thread_default(&self) -> MainContextThreadDefault {
+        unsafe {
+            ffi::g_main_context_push_thread_default(self.to_glib_none().0);
+        }
+        MainContextThreadDefault(self)
+    }
+}
+
+pub struct MainContextThreadDefault<'a>(&'a MainContext);
+
+impl<'a> Drop for MainContextThreadDefault<'a> {
+    fn drop(&mut self) {
+        self.0.pop_thread_default();
+    }
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]

@@ -84,18 +84,6 @@ impl MainContext {
         }
     }
 
-    pub fn pop_thread_default(&self) {
-        unsafe {
-            ffi::g_main_context_pop_thread_default(self.to_glib_none().0);
-        }
-    }
-
-    pub fn push_thread_default(&self) {
-        unsafe {
-            ffi::g_main_context_push_thread_default(self.to_glib_none().0);
-        }
-    }
-
     //pub fn query(&self, max_priority: i32, fds: /*Ignored*/Vec<PollFD>) -> (i32, i32) {
     //    unsafe { TODO: call ffi::g_main_context_query() }
     //}
