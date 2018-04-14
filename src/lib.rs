@@ -175,6 +175,7 @@ pub mod value;
 pub mod variant;
 mod variant_type;
 mod main_context;
+pub use main_context::MainContextThreadDefault;
 mod date_time;
 mod date;
 pub use date::Date;
