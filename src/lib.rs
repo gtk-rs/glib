@@ -159,6 +159,8 @@ pub use char::*;
 mod checksum;
 pub mod closure;
 pub mod error;
+pub mod functions;
+pub use functions::*;
 mod enums;
 mod file_error;
 mod key_file;

@@ -1080,15 +1080,6 @@ pub fn spaced_primes_closest(num: u32) -> u32 {
 //    unsafe { TODO: call ffi::g_spawn_async_with_pipes() }
 //}
 
-#[cfg(any(feature = "v2_34", feature = "dox"))]
-pub fn spawn_check_exit_status(exit_status: i32) -> Result<(), Error> {
-    unsafe {
-        let mut error = ptr::null_mut();
-        let _ = ffi::g_spawn_check_exit_status(exit_status, &mut error);
-        if error.is_null() { Ok(()) } else { Err(from_glib_full(error)) }
-    }
-}
-
 #[cfg(any(unix, feature = "dox"))]
 pub fn spawn_command_line_async(command_line: &str) -> Result<(), Error> {
     unsafe {
