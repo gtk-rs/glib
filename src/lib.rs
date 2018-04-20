@@ -91,6 +91,7 @@ extern crate futures_channel;
 extern crate futures_util;
 
 use std::ffi::CStr;
+pub use binding::{Binding, BindingExt};
 pub use bytes::Bytes;
 pub use closure::Closure;
 pub use error::{Error, BoolError};
@@ -137,6 +138,7 @@ pub use time_val::{
     get_current_time,
 };
 pub use enums::{
+    BindingFlags,
     UserDirectory,
     EnumClass,
     EnumValue,
@@ -162,6 +164,7 @@ pub use auto::functions::*;
 #[allow(non_upper_case_globals)]
 mod auto;
 
+pub mod binding;
 mod bytes;
 pub mod char;
 pub use char::*;
