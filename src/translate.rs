@@ -786,6 +786,140 @@ impl Drop for HashTable {
     }
 }
 
+impl<'a, T> ToGlibContainerFromSlice<'a, *const glib_ffi::GArray> for &'a T
+where T: GlibPtrDefault + ToGlibPtr<'a, <T as GlibPtrDefault>::GlibType> {
+    type Storage = (Option<Array>, Vec<Stash<'a, <T as GlibPtrDefault>::GlibType, &'a T>>);
+
+    #[inline]
+    fn to_glib_none_from_slice(t: &'a [&'a T]) -> (*const glib_ffi::GArray, Self::Storage) {
+        let (list, stash) = ToGlibContainerFromSlice::<*mut glib_ffi::GArray>::to_glib_none_from_slice(t);
+        (list as *const glib_ffi::GArray, stash)
+    }
+
+    #[inline]
+    fn to_glib_container_from_slice(_t: &'a [&'a T]) -> (*const glib_ffi::GArray, Self::Storage) {
+        unimplemented!()
+    }
+
+    #[inline]
+    fn to_glib_full_from_slice(_t: &[&'a T]) -> *const glib_ffi::GArray {
+        unimplemented!()
+    }
+}
+
+pub struct Array(*mut glib_ffi::GArray);
+
+impl Drop for Array {
+    fn drop(&mut self) {
+        unsafe { glib_ffi::g_array_free(self.0, true.to_glib()); }
+    }
+}
+
+impl<'a, T> ToGlibContainerFromSlice<'a, *mut glib_ffi::GArray> for T
+where T: GlibPtrDefault + ToGlibPtr<'a, <T as GlibPtrDefault>::GlibType> {
+    type Storage = (Option<Array>, Vec<Stash<'a, <T as GlibPtrDefault>::GlibType, T>>);
+
+    #[inline]
+    fn to_glib_none_from_slice(t: &'a [T]) -> (*mut glib_ffi::GArray, Self::Storage) {
+        let stash_vec: Vec<_> =
+            t.iter().map(|v| v.to_glib_none()).collect();
+        let size = match stash_vec.get(0) {
+            Some(x) => mem::size_of_val(x) as u32,
+            None => 0,
+        };
+        unsafe {
+            let mut arr: *mut glib_ffi::GArray = glib_ffi::g_array_sized_new(false.to_glib(),
+                                                                             false.to_glib(),
+                                                                             size,
+                                                                             t.len() as u32);
+            for stash in &stash_vec {
+                arr = glib_ffi::g_array_append_vals(arr, &stash.0 as *const _ as *const _, 1);
+            }
+            (arr, (Some(Array(arr)), stash_vec))
+        }
+    }
+
+    #[inline]
+    fn to_glib_container_from_slice(t: &'a [T]) -> (*mut glib_ffi::GArray, Self::Storage) {
+        let stash_vec: Vec<_> =
+            t.iter().map(|v| v.to_glib_none()).collect();
+        let size = match stash_vec.get(0) {
+            Some(x) => mem::size_of_val(x) as u32,
+            None => 0,
+        };
+        unsafe {
+            let mut arr: *mut glib_ffi::GArray = glib_ffi::g_array_sized_new(false.to_glib(),
+                                                                             false.to_glib(),
+                                                                             size,
+                                                                             t.len() as u32);
+            for stash in &stash_vec {
+                arr = glib_ffi::g_array_append_vals(arr, &stash.0 as *const _ as *const _, 1);
+            }
+            (arr, (None, stash_vec))
+        }
+    }
+
+    #[inline]
+    fn to_glib_full_from_slice(t: &[T]) -> *mut glib_ffi::GArray {
+        let size = match t.get(0) {
+            Some(x) => mem::size_of_val(x) as u32,
+            None => 0,
+        };
+        unsafe {
+            let mut arr: *mut glib_ffi::GArray = glib_ffi::g_array_sized_new(false.to_glib(),
+                                                                             false.to_glib(),
+                                                                             size,
+                                                                             t.len() as u32);
+            for ptr in t.iter().map(|v| v.to_glib_full()) {
+                arr = glib_ffi::g_array_append_vals(arr, Ptr::to(ptr), 1);
+            }
+            arr
+        }
+    }
+}
+
+impl<T> FromGlibContainerAsVec<<T as GlibPtrDefault>::GlibType, *mut glib_ffi::GArray> for T
+where T: GlibPtrDefault + FromGlibPtrNone<<T as GlibPtrDefault>::GlibType> + FromGlibPtrFull<<T as GlibPtrDefault>::GlibType> {
+    unsafe fn from_glib_none_num_as_vec(ptr: *mut glib_ffi::GArray, num: usize) -> Vec<T> {
+        if num == 0 || ptr.is_null() {
+            return Vec::new()
+        }
+        let mut res = Vec::with_capacity(num);
+        let data = (*ptr).data as *mut T;
+        for pos in 0..num {
+            let item_ptr: <T as GlibPtrDefault>::GlibType = Ptr::from(data.offset(pos as isize));
+            if !item_ptr.is_null() {
+                res.push(from_glib_none(item_ptr));
+            }
+        }
+        res
+    }
+
+    unsafe fn from_glib_container_num_as_vec(ptr: *mut glib_ffi::GArray, num: usize) -> Vec<T> {
+        let res = FromGlibContainer::from_glib_none_num(ptr, num);
+        if !ptr.is_null() {
+            glib_ffi::g_array_free(ptr as *mut _, true.to_glib());
+        }
+        res
+    }
+
+    unsafe fn from_glib_full_num_as_vec(ptr: *mut glib_ffi::GArray, num: usize) -> Vec<T> {
+        if num == 0 || ptr.is_null() {
+            return Vec::new()
+        }
+        let mut res = Vec::with_capacity(num);
+        let data = (*ptr).data as *mut T;
+        for pos in 0..num {
+            let item_ptr: <T as GlibPtrDefault>::GlibType = Ptr::from(data.offset(pos as isize));
+            if !item_ptr.is_null() {
+                res.push(from_glib_none(item_ptr));
+            }
+        }
+        glib_ffi::g_array_free(ptr as *mut _, true.to_glib());
+        res
+    }
+}
+
 /// Translate a simple type.
 pub trait FromGlib<T>: Sized {
     fn from_glib(val: T) -> Self;
@@ -1544,7 +1678,7 @@ mod tests {
         let ptr: *mut *mut c_char = stash.0;
         let ptr_copy = unsafe { glib_ffi::g_strdupv(ptr) };
 
-        let actual: Vec<String> = unsafe{ FromGlibPtrContainer::from_glib_full(ptr_copy) };
+        let actual: Vec<String> = unsafe { FromGlibPtrContainer::from_glib_full(ptr_copy) };
         assert_eq!(v, actual);
     }
 
