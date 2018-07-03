@@ -95,6 +95,7 @@ extern crate futures_util;
 extern crate futures_stable;
 
 use std::ffi::CStr;
+pub use binding::{Binding, BindingExt};
 pub use bytes::Bytes;
 pub use string::String;
 pub use closure::Closure;
@@ -143,6 +144,7 @@ pub use time_val::{
     get_current_time,
 };
 pub use enums::{
+    BindingFlags,
     UserDirectory,
     EnumClass,
     EnumValue,
@@ -168,6 +170,7 @@ pub use auto::functions::*;
 #[allow(non_upper_case_globals)]
 mod auto;
 
+pub mod binding;
 mod bytes;
 mod string;
 pub mod char;

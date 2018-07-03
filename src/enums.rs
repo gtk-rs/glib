@@ -11,6 +11,43 @@ use value::Value;
 use std::cmp;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum BindingFlags {
+    Default,
+    Bidirectional,
+    SyncCreate,
+    InvertBoolean,
+    __Unknown(u32),
+}
+
+#[doc(hidden)]
+impl ToGlib for BindingFlags {
+    type GlibType = gobject_ffi::GBindingFlags;
+
+    fn to_glib(&self) -> gobject_ffi::GBindingFlags {
+        match *self {
+            BindingFlags::Default => gobject_ffi::G_BINDING_DEFAULT,
+            BindingFlags::Bidirectional => gobject_ffi::G_BINDING_BIDIRECTIONAL,
+            BindingFlags::SyncCreate => gobject_ffi::G_BINDING_SYNC_CREATE,
+            BindingFlags::InvertBoolean => gobject_ffi::G_BINDING_INVERT_BOOLEAN,
+            BindingFlags::__Unknown(value) => value
+        }
+    }
+}
+
+#[doc(hidden)]
+impl FromGlib<gobject_ffi::GBindingFlags> for BindingFlags {
+    fn from_glib(value: gobject_ffi::GBindingFlags) -> Self {
+        match value {
+            0 => BindingFlags::Default,
+            1 => BindingFlags::Bidirectional,
+            2 => BindingFlags::SyncCreate,
+            4 => BindingFlags::InvertBoolean,
+            value => BindingFlags::__Unknown(value),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum UserDirectory {
     Desktop,
     Documents,
