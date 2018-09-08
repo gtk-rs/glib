@@ -81,8 +81,12 @@ extern crate libc;
 extern crate glib_sys as ffi;
 extern crate gobject_sys as gobject_ffi;
 
+#[cfg(feature="futures")]
+pub extern crate futures;
+
 use std::ffi::CStr;
 pub use bytes::Bytes;
+pub use string::String;
 pub use closure::Closure;
 pub use error::{Error, BoolError};
 pub use file_error::FileError;
@@ -92,12 +96,13 @@ pub use object::{
     Object,
     ObjectExt,
     WeakRef,
+    SendWeakRef,
 };
 pub use signal::{
     SignalHandlerId,
     signal_handler_block,
+    signal_handler_disconnect,
     signal_handler_unblock,
-    signal_stop_emission,
     signal_stop_emission_by_name
 };
 
@@ -153,7 +158,11 @@ pub use auto::functions::*;
 #[allow(non_upper_case_globals)]
 mod auto;
 
+pub use gobject::*;
+mod gobject;
+
 mod bytes;
+mod string;
 pub mod char;
 pub use char::*;
 mod checksum;
@@ -175,6 +184,39 @@ pub mod value;
 pub mod variant;
 mod variant_type;
 mod main_context;
-mod date_time;
 mod date;
 pub use date::Date;
+mod value_array;
+pub use value_array::ValueArray;
+mod param_spec;
+pub use param_spec::ParamSpec;
+mod quark;
+pub use quark::Quark;
+
+pub mod send_unique;
+pub use send_unique::{
+    SendUniqueCell,
+    SendUnique,
+};
+
+#[cfg(feature="futures")]
+mod main_context_futures;
+#[cfg(feature="futures")]
+mod source_futures;
+#[cfg(feature="futures")]
+pub use source_futures::*;
+
+// Actual thread IDs can be reused by the OS once the old thread finished.
+// This works around it by using our own counter for threads.
+//
+// Taken from the fragile crate
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+fn next_thread_id() -> usize {
+    static mut COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
+    unsafe { COUNTER.fetch_add(1, Ordering::SeqCst) }
+}
+
+pub(crate) fn get_thread_id() -> usize {
+    thread_local!(static THREAD_ID: usize = next_thread_id());
+    THREAD_ID.with(|&x| x)
+}

@@ -18,6 +18,7 @@ use Value;
 use ToValue;
 
 glib_wrapper! {
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
     pub struct Closure(Shared<gobject_ffi::GClosure>);
 
     match fn {
@@ -100,6 +101,9 @@ impl Closure {
         }
     }
 }
+
+unsafe impl Send for Closure {}
+unsafe impl Sync for Closure {}
 
 #[cfg(test)]
 mod tests {
