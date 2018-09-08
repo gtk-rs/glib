@@ -71,6 +71,12 @@ impl Type {
         }
     }
 
+    pub fn qname(&self) -> ::Quark {
+        unsafe {
+            from_glib(gobject_ffi::g_type_qname(self.to_glib()))
+        }
+    }
+
     pub fn is_a(&self, other: &Type) -> bool {
         unsafe {
             from_glib(gobject_ffi::g_type_is_a(self.to_glib(), other.to_glib()))
@@ -171,6 +177,12 @@ impl SetValue for Type {
 }
 
 impl<'a, T: ?Sized + StaticType> StaticType for &'a T {
+    fn static_type() -> Type {
+        T::static_type()
+    }
+}
+
+impl<'a, T: ?Sized + StaticType> StaticType for &'a mut T {
     fn static_type() -> Type {
         T::static_type()
     }
@@ -300,7 +312,7 @@ impl<'a> ToGlibContainerFromSlice<'a, *mut glib_ffi::GType> for Type {
     }
 
     fn to_glib_full_from_slice(t: &[Type]) -> *mut glib_ffi::GType {
-        if t.len() == 0 {
+        if t.is_empty() {
             return ptr::null_mut();
         }
 

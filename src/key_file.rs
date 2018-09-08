@@ -6,6 +6,7 @@ use libc;
 use ffi;
 use translate::*;
 use std;
+use std::mem;
 use std::ptr;
 use std::path;
 use error::Error;
@@ -68,6 +69,34 @@ impl KeyFile {
         unsafe {
             let ret = ffi::g_key_file_to_data(self.to_glib_none().0, ptr::null_mut(), ptr::null_mut());
             from_glib_full(ret)
+        }
+    }
+
+    pub fn get_boolean(&self, group_name: &str, key: &str) -> Result<bool, Error> {
+        unsafe {
+            let mut error = ptr::null_mut();
+            let ret = ffi::g_key_file_get_boolean(self.to_glib_none().0, group_name.to_glib_none().0, key.to_glib_none().0, &mut error);
+            if error.is_null() { Ok(from_glib(ret)) } else { Err(from_glib_full(error)) }
+        }
+    }
+
+    pub fn has_key(&self, group_name: &str, key: &str) -> Result<bool, Error> {
+        unsafe {
+            let mut error = ptr::null_mut();
+            let ret = ffi::g_key_file_has_key(self.to_glib_none().0, group_name.to_glib_none().0, key.to_glib_none().0, &mut error);
+            if error.is_null() { Ok(from_glib(ret)) } else { Err(from_glib_full(error)) }
+        }
+    }
+
+    pub fn get_boolean_list(&self, group_name: &str, key: &str) -> Result<Vec<bool>, Error> {
+        unsafe {
+            let mut length = mem::uninitialized();
+            let mut error = ptr::null_mut();
+            let ret = ffi::g_key_file_get_boolean_list(self.to_glib_none().0, group_name.to_glib_none().0, key.to_glib_none().0, &mut length, &mut error);
+            if !error.is_null() {
+                return Err(from_glib_full(error));
+            }
+            Ok(FromGlibContainer::from_glib_container_num(ret, length as usize))
         }
     }
 }
