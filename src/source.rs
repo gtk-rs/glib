@@ -1,13 +1,19 @@
-// Copyright 2013-2015, The Gtk-rs Project Developers.
+// Copyright 2013-2018, The Gtk-rs Project Developers.
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
 use std::cell::RefCell;
 use std::mem::transmute;
+#[cfg(all(unix, any(feature = "v2_36", feature = "dox")))]
+use std::os::unix::io::RawFd;
+#[cfg(all(not(unix), feature = "dox"))]
+use libc::c_int as RawFd;
 use std::process;
 use std::thread;
 use ffi as glib_ffi;
 use ffi::{gboolean, gpointer};
+#[cfg(any(all(feature = "v2_36", unix), feature = "dox"))]
+use IOCondition;
 use translate::{from_glib, from_glib_full, FromGlib, ToGlib, ToGlibPtr};
 use libc;
 
@@ -35,8 +41,11 @@ impl FromGlib<u32> for SourceId {
 }
 
 /// Process identificator
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Pid(pub glib_ffi::GPid);
+
+unsafe impl Send for Pid {}
+unsafe impl Sync for Pid {}
 
 /// Continue calling the closure in the future iterations or drop it.
 ///
@@ -58,20 +67,24 @@ impl ToGlib for Continue {
 
 /// Unwinding propagation guard. Aborts the process if destroyed while
 /// panicking.
+#[deprecated(note="Rustc has this functionality built-in since 1.26.0")]
 pub struct CallbackGuard(());
 
+#[allow(deprecated)]
 impl CallbackGuard {
     pub fn new() -> CallbackGuard {
         CallbackGuard(())
     }
 }
 
+#[allow(deprecated)]
 impl Default for CallbackGuard {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[allow(deprecated)]
 impl Drop for CallbackGuard {
     fn drop(&mut self) {
         use std::io::stderr;
@@ -86,13 +99,11 @@ impl Drop for CallbackGuard {
 
 #[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
 unsafe extern "C" fn trampoline(func: gpointer) -> gboolean {
-    let _guard = CallbackGuard::new();
     let func: &RefCell<Box<FnMut() -> Continue + 'static>> = transmute(func);
     (&mut *func.borrow_mut())().to_glib()
 }
 
 unsafe extern "C" fn destroy_closure(ptr: gpointer) {
-    let _guard = CallbackGuard::new();
     Box::<RefCell<Box<FnMut() -> Continue + 'static>>>::from_raw(ptr as *mut _);
 }
 
@@ -104,18 +115,36 @@ fn into_raw<F: FnMut() -> Continue + Send + 'static>(func: F) -> gpointer {
 
 #[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
 unsafe extern "C" fn trampoline_child_watch(pid: glib_ffi::GPid, status: i32, func: gpointer) {
-    let _guard = CallbackGuard::new();
     let func: &RefCell<Box<FnMut(Pid, i32) + 'static>> = transmute(func);
     (&mut *func.borrow_mut())(Pid(pid), status)
 }
 
 unsafe extern "C" fn destroy_closure_child_watch(ptr: gpointer) {
-    let _guard = CallbackGuard::new();
     Box::<RefCell<Box<FnMut(Pid, i32) + 'static>>>::from_raw(ptr as *mut _);
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
 fn into_raw_child_watch<F: FnMut(Pid, i32) + Send + 'static>(func: F) -> gpointer {
     let func: Box<RefCell<Box<FnMut(Pid, i32) + Send + 'static>>> =
+        Box::new(RefCell::new(Box::new(func)));
+    Box::into_raw(func) as gpointer
+}
+
+#[cfg(any(all(feature = "v2_36", unix), feature = "dox"))]
+#[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
+unsafe extern "C" fn trampoline_unix_fd(fd: i32, condition: glib_ffi::GIOCondition, func: gpointer) -> gboolean {
+    let func: &RefCell<Box<FnMut(RawFd, IOCondition) -> Continue + 'static>> = transmute(func);
+    (&mut *func.borrow_mut())(fd, from_glib(condition)).to_glib()
+}
+
+#[cfg(any(all(feature = "v2_36", unix), feature = "dox"))]
+unsafe extern "C" fn destroy_closure_unix_fd(ptr: gpointer) {
+    Box::<RefCell<Box<FnMut(RawFd, IOCondition) + 'static>>>::from_raw(ptr as *mut _);
+}
+
+#[cfg(any(all(feature = "v2_36", unix), feature = "dox"))]
+fn into_raw_unix_fd<F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static>(func: F) -> gpointer {
+    let func: Box<RefCell<Box<FnMut(RawFd, IOCondition) -> Continue + Send + 'static>>> =
         Box::new(RefCell::new(Box::new(func)));
     Box::into_raw(func) as gpointer
 }
@@ -198,6 +227,24 @@ where F: FnMut() -> Continue + Send + 'static {
     }
 }
 
+#[cfg(any(all(feature = "v2_36", unix), feature = "dox"))]
+/// Adds a closure to be called by the main loop the returned `Source` is attached to whenever a
+/// UNIX file descriptor reaches the given IO condition.
+///
+/// `func` will be called repeatedly while the file descriptor matches the given IO condition
+/// until it returns `Continue(false)`.
+///
+/// The default main loop almost always is the main loop of the main thread.
+/// Thus the closure is called on the main thread.
+pub fn unix_fd_add<F>(fd: RawFd, condition: IOCondition, func: F) -> SourceId
+where F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static {
+    unsafe {
+        let trampoline = trampoline_unix_fd as *mut libc::c_void;
+        from_glib(glib_ffi::g_unix_fd_add_full(glib_ffi::G_PRIORITY_DEFAULT, fd, condition.to_glib(),
+            Some(transmute(trampoline)), into_raw_unix_fd(func), Some(destroy_closure_unix_fd)))
+    }
+}
+
 /// Removes the source with the given id `source_id` from the default main context.
 ///
 /// It is a programmer error to attempt to remove a non-existent source.
@@ -205,6 +252,7 @@ where F: FnMut() -> Continue + Send + 'static {
 ///
 /// For historical reasons, the native function always returns true, so we
 /// ignore it here.
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 pub fn source_remove(source_id: SourceId) {
     unsafe {
         glib_ffi::g_source_remove(source_id.to_glib());
@@ -334,6 +382,29 @@ where F: FnMut() -> Continue + Send + 'static {
     unsafe {
         let source = glib_ffi::g_unix_signal_source_new(signum);
         glib_ffi::g_source_set_callback(source, Some(trampoline), into_raw(func), Some(destroy_closure));
+        glib_ffi::g_source_set_priority(source, priority.to_glib());
+
+        let name = name.into();
+        if let Some(name) = name {
+            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+        }
+
+        from_glib_full(source)
+    }
+}
+
+#[cfg(any(all(feature = "v2_36", unix), feature = "dox"))]
+/// Adds a closure to be called by the main loop the returned `Source` is attached to whenever a
+/// UNIX file descriptor reaches the given IO condition.
+///
+/// `func` will be called repeatedly while the file descriptor matches the given IO condition
+/// until it returns `Continue(false)`.
+pub fn unix_fd_source_new<'a, N: Into<Option<&'a str>>, F>(fd: RawFd, condition: IOCondition, name: N, priority: Priority, func: F) -> Source
+where F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static {
+    unsafe {
+        let source = glib_ffi::g_unix_fd_source_new(fd, condition.to_glib());
+        let trampoline = trampoline_unix_fd as *mut libc::c_void;
+        glib_ffi::g_source_set_callback(source, Some(transmute(trampoline)), into_raw_unix_fd(func), Some(destroy_closure_unix_fd));
         glib_ffi::g_source_set_priority(source, priority.to_glib());
 
         let name = name.into();

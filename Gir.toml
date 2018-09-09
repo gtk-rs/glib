@@ -5,11 +5,11 @@ version = "2.0"
 min_cfg_version = "2.32"
 target_path = "."
 work_mode = "normal"
+single_version_file = true
 
 generate = [
     "GLib.DateDay",
     "GLib.DateMonth",
-    "GLib.DateTime",
     "GLib.DateWeekday",
     "GLib.DateYear",
     "GLib.FormatSizeFlags",
@@ -219,6 +219,71 @@ status = "generate"
     pattern = "unix_fd.*"
     # Need manual binding for RawFd
     ignore = true
+    [[object.function]]
+    name = "close"
+    # Need manual binding for RawFd
+    ignore = true
+    [[object.function]]
+    name = "log_writer_is_journald"
+    # Need manual binding for RawFd
+    ignore = true
+    [[object.function]]
+    name = "log_writer_supports_color"
+    # Need manual binding for RawFd
+    ignore = true
+    [[object.function]]
+    name = "unix_set_fd_nonblocking"
+    # Need manual binding for RawFd
+    ignore = true
+    [[object.function]]
+    name = "environ_getenv"
+    # manual input &[OsString]
+    ignore = true
+    [[object.function]]
+    pattern = "environ_(un)?setenv"
+    # unusable
+    ignore = true
+    [[object.function]]
+    name = "get_environ"
+        [object.function.return]
+        string_type = "os_string"
+    [[object.function]]
+    name = "listenv"
+        [object.function.return]
+        string_type = "os_string"
+    [[object.function]]
+    name = "shell_parse_argv"
+        [[object.function.parameter]]
+        name = "command_line"
+        string_type = "os_string"
+        [[object.function.parameter]]
+        name = "argvp"
+        string_type = "os_string"
+    [[object.function]]
+    name = "shell_quote"
+        [[object.function.parameter]]
+        name = "unquoted_string"
+        string_type = "os_string"
+        [object.function.return]
+        string_type = "os_string"
+    [[object.function]]
+    name = "shell_unquote"
+        [[object.function.parameter]]
+        name = "quoted_string"
+        string_type = "os_string"
+        [object.function.return]
+        string_type = "os_string"
+    [[object.function]]
+    name = "spawn_command_line_async"
+        [[object.function.parameter]]
+        name = "command_line"
+        string_type = "os_string"
+    [[object.function]]
+    name = "intern_static_string"
+    ignore = true
+    [[object.function]]
+    name = "intern_string"
+    ignore = true
     [[object.constant]]
     pattern = "DIR_SEPARATOR(_S)?"
     #not cross-platform
@@ -259,6 +324,7 @@ status = "generate"
 [[object]]
 name = "GLib.Checksum"
 status = "generate"
+concurrency = "send+sync"
     [[object.function]]
     name = "get_digest"
     #wrong array definition
@@ -314,6 +380,23 @@ status = "generate"
        name = "set_integer_list"
        #wrong array type
        ignore = true
+       [[object.function]]
+       name = "get_boolean"
+       #boolean return value needs to be returned
+       ignore = true
+       [[object.function]]
+       name = "has_key"
+       #boolean return value needs to be returned
+       ignore = true
+       [[object.function]]
+       name = "get_boolean_list"
+       #boolean array needs to be converted to Vec<bool>
+       ignore = true
+
+[[object]]
+name = "GLib.DateTime"
+status = "generate"
+concurrency = "send+sync"
 
 [[object]]
 name = "GLib.MainContext"
@@ -329,10 +412,24 @@ concurrency = "send+sync"
        # source id is a newtype
        ignore = true
 
+       [[object.function]]
+       name = "default"
+           [object.function.return]
+           nullable = false
+
+       [[object.function]]
+       name = "ref_thread_default"
+           [object.function.return]
+           nullable = false
+
 [[object]]
 name = "GLib.MainLoop"
 status = "generate"
 concurrency = "send+sync"
+       [[object.function]]
+       name = "get_context"
+           [object.function.return]
+           nullable = false
 
 [[object]]
 name = "GLib.Source"
@@ -347,6 +444,7 @@ concurrency = "send+sync"
 [[object]]
 name = "GLib.TimeZone"
 status = "generate"
+concurrency = "send+sync"
     [[object.function]]
     name = "adjust_time"
     # in-out parameter

@@ -5,6 +5,8 @@
 //! `IMPL` Shared (reference counted) wrapper implementation.
 
 use std::fmt;
+use std::ptr;
+use std::cmp;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use translate::*;
@@ -20,6 +22,7 @@ macro_rules! glib_shared_wrapper {
 
         impl $crate::types::StaticType for $name {
             fn static_type() -> $crate::types::Type {
+                #[allow(unused_unsafe)]
                 unsafe { $crate::translate::from_glib($get_type_expr) }
             }
         }
@@ -273,7 +276,7 @@ pub trait SharedMemoryManager<T> {
 
 /// Encapsulates memory management logic for shared types.
 pub struct Shared<T, MM: SharedMemoryManager<T>> {
-    inner: *mut T,
+    inner: ptr::NonNull<T>,
     borrowed: bool,
     mm: PhantomData<*const MM>,
 }
@@ -281,14 +284,14 @@ pub struct Shared<T, MM: SharedMemoryManager<T>> {
 impl<T, MM: SharedMemoryManager<T>> Drop for Shared<T, MM> {
     fn drop(&mut self) {
         if !self.borrowed {
-            unsafe { MM::unref(self.inner); }
+            unsafe { MM::unref(self.inner.as_ptr()); }
         }
     }
 }
 
 impl<T, MM: SharedMemoryManager<T>> Clone for Shared<T, MM> {
     fn clone(&self) -> Self {
-        unsafe { MM::ref_(self.inner); }
+        unsafe { MM::ref_(self.inner.as_ptr()); }
         Shared {
             inner: self.inner,
             borrowed: false,
@@ -299,7 +302,22 @@ impl<T, MM: SharedMemoryManager<T>> Clone for Shared<T, MM> {
 
 impl<T, MM: SharedMemoryManager<T>> fmt::Debug for Shared<T, MM> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Shared {{ inner: {:?}, borrowed: {} }}", self.inner, self.borrowed)
+        f.debug_struct("Shared")
+            .field("inner", &self.inner)
+            .field("borrowed", &self.borrowed)
+            .finish()
+    }
+}
+
+impl<T, MM: SharedMemoryManager<T>> PartialOrd for Shared<T, MM> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.inner.partial_cmp(&other.inner)
+    }
+}
+
+impl<T, MM: SharedMemoryManager<T>> Ord for Shared<T, MM> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.inner.cmp(&other.inner)
     }
 }
 
@@ -323,13 +341,13 @@ where MM: SharedMemoryManager<T> + 'static {
 
     #[inline]
     fn to_glib_none(&'a self) -> Stash<'a, *mut T, Self> {
-        Stash(self.inner, self)
+        Stash(self.inner.as_ptr(), self)
     }
 
     #[inline]
     fn to_glib_full(&self) -> *mut T {
-        unsafe { MM::ref_(self.inner); }
-        self.inner
+        unsafe { MM::ref_(self.inner.as_ptr()); }
+        self.inner.as_ptr()
     }
 }
 
@@ -339,7 +357,7 @@ impl<T: 'static, MM: SharedMemoryManager<T>> FromGlibPtrNone<*mut T> for Shared<
         assert!(!ptr.is_null());
         MM::ref_(ptr);
         Shared {
-            inner: ptr,
+            inner: ptr::NonNull::new_unchecked(ptr),
             borrowed: false,
             mm: PhantomData,
         }
@@ -352,7 +370,7 @@ impl<T: 'static, MM: SharedMemoryManager<T>> FromGlibPtrNone<*const T> for Share
         assert!(!ptr.is_null());
         MM::ref_(ptr as *mut _);
         Shared {
-            inner: ptr as *mut _,
+            inner: ptr::NonNull::new_unchecked(ptr as *mut _),
             borrowed: false,
             mm: PhantomData,
         }
@@ -364,7 +382,7 @@ impl<T: 'static, MM: SharedMemoryManager<T>> FromGlibPtrFull<*mut T> for Shared<
     unsafe fn from_glib_full(ptr: *mut T) -> Self {
         assert!(!ptr.is_null());
         Shared {
-            inner: ptr,
+            inner: ptr::NonNull::new_unchecked(ptr),
             borrowed: false,
             mm: PhantomData,
         }
@@ -376,7 +394,7 @@ impl<T: 'static, MM: SharedMemoryManager<T>> FromGlibPtrBorrow<*mut T> for Share
     unsafe fn from_glib_borrow(ptr: *mut T) -> Self {
         assert!(!ptr.is_null());
         Shared {
-            inner: ptr,
+            inner: ptr::NonNull::new_unchecked(ptr),
             borrowed: true,
             mm: PhantomData,
         }
