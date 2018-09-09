@@ -2,15 +2,18 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
+use types::Type;
+use types::StaticType;
 use ffi as glib_ffi;
 use translate::*;
 use std::borrow::{Borrow, Cow, ToOwned};
 use std::cmp::{PartialEq, Eq};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::mem;
 use std::ops::Deref;
 use std::slice;
+use value::{Value, SetValue, FromValueOptional, SetValueOptional};
+use gobject_ffi;
 
 /// Describes `Variant` types.
 ///
@@ -66,7 +69,7 @@ impl Deref for VariantType {
     type Target = VariantTy;
     fn deref(&self) -> &VariantTy {
         unsafe {
-            mem::transmute(slice::from_raw_parts(self.ptr as *const u8, self.len))
+            &*(slice::from_raw_parts(self.ptr as *const u8, self.len) as *const [u8] as *const VariantTy)
         }
     }
 }
@@ -141,7 +144,7 @@ impl VariantTy {
             let ok = from_glib(glib_ffi::g_variant_type_string_scan(ptr as *const _,
                 limit as *const _, &mut end as *mut usize as *mut _));
             if ok && end == limit {
-                Ok(mem::transmute(type_string))
+                Ok(&*(type_string.as_bytes() as *const [u8] as *const VariantTy))
             } else {
                 Err(())
             }
@@ -150,7 +153,7 @@ impl VariantTy {
 
     /// Converts a type string into `&VariantTy` without any checks.
     pub unsafe fn from_str_unchecked(type_string: &str) -> &VariantTy {
-        mem::transmute(type_string)
+        &*(type_string as *const str as *const VariantTy)
     }
 
     /// Creates `&VariantTy` with a wildcard lifetime from a `GVariantType`
@@ -158,7 +161,7 @@ impl VariantTy {
     #[doc(hidden)]
     pub unsafe fn from_ptr<'a>(ptr: *const glib_ffi::GVariantType) -> &'a VariantTy {
         let len = glib_ffi::g_variant_type_get_string_length(ptr) as usize;
-        mem::transmute(slice::from_raw_parts(ptr as *const u8, len))
+        &*(slice::from_raw_parts(ptr as *const u8, len) as *const [u8] as *const VariantTy)
     }
 
     /// Returns a `GVariantType` pointer.
@@ -206,6 +209,69 @@ impl ToOwned for VariantTy {
                 len: self.inner.len(),
             }
         }
+    }
+}
+
+impl StaticType for VariantTy {
+    fn static_type() -> Type {
+        unsafe { from_glib(glib_ffi::g_variant_type_get_gtype()) }
+    }
+}
+
+impl SetValue for VariantTy {
+    unsafe fn set_value(value: &mut Value, this: &Self) {
+        gobject_ffi::g_value_set_boxed(value.to_glib_none_mut().0, this.to_glib_none().0 as glib_ffi::gpointer)
+    }
+}
+
+impl SetValueOptional for VariantTy {
+    unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
+        use std::ptr;
+        let p = match this{
+            Some(ref t) => t.to_glib_none().0 as glib_ffi::gpointer,
+            None => ptr::null()
+        };
+        gobject_ffi::g_value_set_boxed(value.to_glib_none_mut().0, p)
+    }
+}
+
+impl<'a> FromValueOptional<'a> for &'a VariantTy {
+    unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
+        let cvty = gobject_ffi::g_value_get_boxed(value.to_glib_none().0) as *mut glib_ffi::GVariantType;
+        if cvty.is_null() {
+            None
+        } else {
+            Some(VariantTy::from_ptr(cvty))
+        }
+    }
+}
+
+impl StaticType for VariantType {
+    fn static_type() -> Type {
+        unsafe { from_glib(glib_ffi::g_variant_type_get_gtype()) }
+    }
+}
+
+impl SetValue for VariantType {
+    unsafe fn set_value(value: &mut Value, this: &Self) {
+        gobject_ffi::g_value_set_boxed(value.to_glib_none_mut().0, this.to_glib_none().0 as glib_ffi::gpointer)
+    }
+}
+
+impl SetValueOptional for VariantType {
+    unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
+        use std::ptr;
+        let p = match this{
+            Some(ref t) => t.to_glib_none().0 as glib_ffi::gpointer,
+            None => ptr::null()
+        };
+        gobject_ffi::g_value_set_boxed(value.to_glib_none_mut().0, p)
+    }
+}
+
+impl<'a> FromValueOptional<'a> for VariantType {
+    unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
+        Option::<VariantType>::from_glib_none(gobject_ffi::g_value_get_boxed(value.to_glib_none().0) as *mut glib_ffi::GVariantType)
     }
 }
 
@@ -273,6 +339,7 @@ mod tests {
     use ffi as glib_ffi;
     use translate::*;
     use super::*;
+    use value::ToValue;
 
     unsafe fn equal<T, U>(ptr1: *const T, ptr2: *const U) -> bool {
         from_glib(glib_ffi::g_variant_type_equal(ptr1 as *const _, ptr2 as *const _))
@@ -347,4 +414,21 @@ mod tests {
             assert!(equal(ty1.as_ptr(), ty2.as_ptr()));
         }
     }
+
+    #[test]
+    fn value() {
+        let ty1 = VariantType::new("*").unwrap();
+        let tyv = ty1.to_value();
+        let ty2 = tyv.get::<VariantType>().unwrap();
+        assert_eq!(ty1, ty2);
+
+        let ty3 = VariantTy::new("*").unwrap();
+        let tyv2 = ty1.to_value();
+        let ty4 = tyv2.get::<VariantType>().unwrap();
+        assert_eq!(ty3, ty4);
+
+        assert_eq!(VariantTy::static_type(), VariantTy::static_type());
+
+    }
+
 }

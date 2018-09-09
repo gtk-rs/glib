@@ -5,13 +5,17 @@ homepage = "http://gtk-rs.org/"
 authors = ["The Gtk-rs Project Developers"]
 description = "Rust bindings for the GLib library"
 readme = "README.md"
-version = "0.5.0"
+version = "0.6.0"
 keywords = ["glib", "gtk-rs", "gnome", "GUI"]
 repository = "https://github.com/gtk-rs/glib"
 license = "MIT"
 exclude = [
     "gir-files/*",
 ]
+
+[badges]
+appveyor = { repository = "GuillaumeGomez/glib", service = "github" }
+travis-ci = { repository = "gtk-rs/glib" }
 
 [lib]
 name = "glib"
@@ -20,15 +24,17 @@ name = "glib"
 lazy_static = "1.0"
 libc = "0.2"
 bitflags = "1.0"
-gobject-sys = "0.6.0"
-glib-sys = "0.6.0"
+gobject-sys = "0.7.0"
+glib-sys = "0.7.0"
+futures-preview = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3"
 
 [features]
 v2_34 = ["glib-sys/v2_34", "gobject-sys/v2_34"]
-v2_38 = ["v2_34", "glib-sys/v2_38", "gobject-sys/v2_38"]
+v2_36 = ["v2_34", "glib-sys/v2_36", "gobject-sys/v2_36"]
+v2_38 = ["v2_36", "glib-sys/v2_38", "gobject-sys/v2_38"]
 v2_40 = ["v2_38", "glib-sys/v2_40"]
 v2_44 = ["v2_40", "glib-sys/v2_44", "gobject-sys/v2_44"]
 v2_46 = ["v2_44", "glib-sys/v2_46", "gobject-sys/v2_46"]
@@ -36,4 +42,6 @@ v2_48 = ["v2_46", "glib-sys/v2_48"]
 v2_50 = ["v2_48", "glib-sys/v2_50"]
 v2_52 = ["v2_50", "glib-sys/v2_52"]
 v2_54 = ["v2_52", "glib-sys/v2_54", "gobject-sys/v2_54"]
+v2_56 = ["v2_54", "glib-sys/v2_56"]
+futures = ["futures-preview", "v2_36"]
 dox = ["glib-sys/dox", "gobject-sys/dox"]

@@ -139,6 +139,26 @@ impl Value {
         }
     }
 
+    /// Tries to downcast to a `&TypedValue`.
+    ///
+    /// Returns `Some(&TypedValue<T>)` if the value carries a type corresponding
+    /// to `T` and `None` otherwise.
+    pub fn downcast_ref<'a, T: FromValueOptional<'a> + SetValue>(&self) -> Option<&TypedValue<T>> {
+        unsafe {
+            let ok = from_glib(
+                gobject_ffi::g_type_check_value_holds(mut_override(self.to_glib_none().0),
+                    T::static_type().to_glib()));
+            if ok {
+                // This transmute is safe because Value and TypedValue have the same
+                // representation: the only difference is the zero-sized phantom data
+                Some(mem::transmute(self))
+            }
+            else {
+                None
+            }
+        }
+    }
+
     /// Tries to get a value of type `T`.
     ///
     /// Returns `Some` if the type is correct and the value is not `None`.
@@ -642,6 +662,26 @@ impl SendValue {
         self.0.downcast().map_err(SendValue)
     }
 
+    /// Tries to downcast to a `&TypedValue`.
+    ///
+    /// Returns `Some(&TypedValue<T>)` if the value carries a type corresponding
+    /// to `T` and `None` otherwise.
+    pub fn downcast_ref<'a, T: FromValueOptional<'a> + SetValue>(&self) -> Option<&TypedValue<T>> {
+        unsafe {
+            let ok = from_glib(
+                gobject_ffi::g_type_check_value_holds(mut_override(self.to_glib_none().0),
+                    T::static_type().to_glib()));
+            if ok {
+                // This transmute is safe because Value and TypedValue have the same
+                // representation: the only difference is the zero-sized phantom data
+                Some(mem::transmute(self))
+            }
+            else {
+                None
+            }
+        }
+    }
+
     #[doc(hidden)]
     pub fn into_raw(self) -> gobject_ffi::GValue {
         self.0.into_raw()
@@ -931,26 +971,21 @@ impl AnyValue {
             copy_box
         });
 
-        Self {
-            val: val,
-            copy_fn: copy_fn,
-        }
+        Self { val, copy_fn }
     }
 
     /// Attempt the value to its concrete type.
     pub fn downcast<T: Any + Clone + 'static>(self) -> Result<T, Self> {
         let AnyValue { val, copy_fn } = self;
-        val.downcast::<T>().map(|val| *val).map_err(|val| AnyValue { val: val, copy_fn: copy_fn })
+        val.downcast().map(|val| *val).map_err(|val| AnyValue { val, copy_fn })
     }
 
     unsafe extern "C" fn copy(v: *mut c_void) -> *mut c_void {
-        let _guard = ::source::CallbackGuard::new();
         let v = &*(v as *mut AnyValue);
         Box::into_raw(Box::new(v.clone())) as *mut c_void
     }
 
     unsafe extern "C" fn free(v: *mut c_void) {
-        let _guard = ::source::CallbackGuard::new();
         let _ = Box::from_raw(v as *mut AnyValue);
     }
 }
@@ -959,7 +994,7 @@ impl Clone for AnyValue {
     fn clone(&self) -> Self {
         let val = (*self.copy_fn)(self.val.as_ref());
         Self {
-            val: val,
+            val,
             copy_fn: self.copy_fn.clone(),
         }
     }
@@ -1017,17 +1052,15 @@ impl AnySendValue {
     /// Attempt the value to its concrete type.
     pub fn downcast<T: Any + Clone + Send + 'static>(self) -> Result<T, Self> {
         let AnySendValue(AnyValue { val, copy_fn }) = self;
-        val.downcast::<T>().map(|val| *val).map_err(|val| AnySendValue(AnyValue { val: val, copy_fn: copy_fn }))
+        val.downcast().map(|val| *val).map_err(|val| AnySendValue(AnyValue { val, copy_fn }))
     }
 
     unsafe extern "C" fn copy(v: *mut c_void) -> *mut c_void {
-        let _guard = ::source::CallbackGuard::new();
         let v = &*(v as *mut AnySendValue);
         Box::into_raw(Box::new(v.clone())) as *mut c_void
     }
 
     unsafe extern "C" fn free(v: *mut c_void) {
-        let _guard = ::source::CallbackGuard::new();
         let _ = Box::from_raw(v as *mut AnySendValue);
     }
 }
