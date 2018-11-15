@@ -17,6 +17,7 @@ generate = [
     "GLib.KeyFileFlags",
     "GLib.OptionArg",
     "GLib.OptionFlags",
+    "GLib.OptionGroup",
     "GLib.SeekType",
     "GLib.Time",
     "GLib.TimeType",

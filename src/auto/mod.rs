@@ -17,6 +17,9 @@ pub use self::main_context::MainContext;
 mod main_loop;
 pub use self::main_loop::MainLoop;
 
+mod option_group;
+pub use self::option_group::OptionGroup;
+
 mod source;
 pub use self::source::Source;
 
