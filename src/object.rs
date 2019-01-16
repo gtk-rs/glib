@@ -705,6 +705,13 @@ macro_rules! glib_object_wrapper {
                 }
             }
         }
+
+        impl ::std::ops::DerefMut for $rust_class_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                use $crate::IsClassFor;
+                self.upcast_ref_mut()
+            }
+        }
     };
 
     // If there is only one parent class
@@ -720,6 +727,13 @@ macro_rules! glib_object_wrapper {
                 }
             }
         }
+
+        impl ::std::ops::DerefMut for $rust_class_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                use $crate::IsClassFor;
+                self.upcast_ref_mut()
+            }
+        }
     };
 
     // If there is more than one parent class
@@ -733,6 +747,13 @@ macro_rules! glib_object_wrapper {
                 unsafe {
                     ::std::mem::transmute(self)
                 }
+            }
+        }
+
+        impl ::std::ops::DerefMut for $rust_class_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                use $crate::IsClassFor;
+                self.upcast_ref_mut()
             }
         }
 
