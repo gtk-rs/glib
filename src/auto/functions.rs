@@ -2,12 +2,12 @@
 // from gir-files (https://github.com/gtk-rs/gir-files)
 // DO NOT EDIT
 
-#[cfg(any(feature = "v2_34", feature = "dox"))]
 use Bytes;
 use ChecksumType;
 use Error;
 use FileTest;
 use FormatSizeFlags;
+use GString;
 use Source;
 use UserDirectory;
 use ffi;
@@ -49,18 +49,11 @@ pub fn assertion_message_cmpstr(domain: &str, file: &str, line: i32, func: &str,
 
 pub fn assertion_message_expr<'a, 'b, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>>(domain: P, file: &str, line: i32, func: &str, expr: Q) {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     let expr = expr.into();
-    let expr = expr.to_glib_none();
     unsafe {
-        ffi::g_assertion_message_expr(domain.0, file.to_glib_none().0, line, func.to_glib_none().0, expr.0);
+        ffi::g_assertion_message_expr(domain.to_glib_none().0, file.to_glib_none().0, line, func.to_glib_none().0, expr.to_glib_none().0);
     }
 }
-
-//#[deprecated]
-//pub fn atexit(func: /*Unknown conversion*//*Unimplemented*/VoidFunc) {
-//    unsafe { TODO: call ffi::g_atexit() }
-//}
 
 pub fn base64_decode(text: &str) -> Vec<u8> {
     unsafe {
@@ -78,7 +71,7 @@ pub fn base64_decode(text: &str) -> Vec<u8> {
 //    unsafe { TODO: call ffi::g_base64_decode_step() }
 //}
 
-pub fn base64_encode(data: &[u8]) -> Option<String> {
+pub fn base64_encode(data: &[u8]) -> Option<GString> {
     let len = data.len() as usize;
     unsafe {
         from_glib_full(ffi::g_base64_encode(data.to_glib_none().0, len))
@@ -92,13 +85,6 @@ pub fn base64_encode(data: &[u8]) -> Option<String> {
 //pub fn base64_encode_step(in_: &[u8], break_lines: bool, out: Vec<u8>, state: &mut i32, save: &mut i32) -> usize {
 //    unsafe { TODO: call ffi::g_base64_encode_step() }
 //}
-
-#[deprecated]
-pub fn basename<P: AsRef<std::path::Path>>(file_name: P) -> Option<std::path::PathBuf> {
-    unsafe {
-        from_glib_none(ffi::g_basename(file_name.as_ref().to_glib_none().0))
-    }
-}
 
 pub fn bit_nth_lsf(mask: libc::c_ulong, nth_bit: i32) -> i32 {
     unsafe {
@@ -143,25 +129,24 @@ pub fn build_pathv(separator: &str, args: &[&std::path::Path]) -> Option<std::pa
     }
 }
 
+#[cfg(any(feature = "v2_58", feature = "dox"))]
+pub fn canonicalize_filename<P: AsRef<std::path::Path>, Q: AsRef<std::path::Path>>(filename: P, relative_to: Q) -> Option<std::path::PathBuf> {
+    unsafe {
+        from_glib_full(ffi::g_canonicalize_filename(filename.as_ref().to_glib_none().0, relative_to.as_ref().to_glib_none().0))
+    }
+}
+
 pub fn chdir<P: AsRef<std::path::Path>>(path: P) -> i32 {
     unsafe {
         ffi::g_chdir(path.as_ref().to_glib_none().0)
     }
 }
 
-pub fn check_version(required_major: u32, required_minor: u32, required_micro: u32) -> Option<String> {
+pub fn check_version(required_major: u32, required_minor: u32, required_micro: u32) -> Option<GString> {
     unsafe {
         from_glib_none(ffi::glib_check_version(required_major, required_minor, required_micro))
     }
 }
-
-//pub fn child_watch_add<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(pid: Pid, function: /*Unknown conversion*//*Unimplemented*/ChildWatchFunc, data: P) -> u32 {
-//    unsafe { TODO: call ffi::g_child_watch_add() }
-//}
-
-//pub fn child_watch_add_full<'a, P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option<&'a /*Unimplemented*/DestroyNotify>>>(priority: i32, pid: Pid, function: /*Unknown conversion*//*Unimplemented*/ChildWatchFunc, data: P, notify: Q) -> u32 {
-//    unsafe { TODO: call ffi::g_child_watch_add_full() }
-//}
 
 pub fn clear_error() -> Result<(), Error> {
     unsafe {
@@ -172,30 +157,28 @@ pub fn clear_error() -> Result<(), Error> {
 }
 
 //#[cfg(any(feature = "v2_56", feature = "dox"))]
-//pub fn clear_handle_id(tag_ptr: u32, clear_func: /*Unknown conversion*//*Unimplemented*/ClearHandleFunc) {
+//pub fn clear_handle_id<P: Fn(u32) + Send + Sync + 'static>(tag_ptr: u32, clear_func: P) {
 //    unsafe { TODO: call ffi::g_clear_handle_id() }
 //}
 
-//#[cfg(any(feature = "v2_34", feature = "dox"))]
-//pub fn clear_pointer(pp: /*Unimplemented*/Fundamental: Pointer, destroy: /*Unknown conversion*//*Unimplemented*/DestroyNotify) {
+//pub fn clear_pointer(pp: /*Unimplemented*/Fundamental: Pointer) {
 //    unsafe { TODO: call ffi::g_clear_pointer() }
 //}
 
-#[cfg(any(feature = "v2_34", feature = "dox"))]
-pub fn compute_checksum_for_bytes(checksum_type: ChecksumType, data: &Bytes) -> Option<String> {
+pub fn compute_checksum_for_bytes(checksum_type: ChecksumType, data: &Bytes) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_compute_checksum_for_bytes(checksum_type.to_glib(), data.to_glib_none().0))
     }
 }
 
-pub fn compute_checksum_for_data(checksum_type: ChecksumType, data: &[u8]) -> Option<String> {
+pub fn compute_checksum_for_data(checksum_type: ChecksumType, data: &[u8]) -> Option<GString> {
     let length = data.len() as usize;
     unsafe {
         from_glib_full(ffi::g_compute_checksum_for_data(checksum_type.to_glib(), data.to_glib_none().0, length))
     }
 }
 
-pub fn compute_checksum_for_string(checksum_type: ChecksumType, str: &str) -> Option<String> {
+pub fn compute_checksum_for_string(checksum_type: ChecksumType, str: &str) -> Option<GString> {
     let length = str.len() as isize;
     unsafe {
         from_glib_full(ffi::g_compute_checksum_for_string(checksum_type.to_glib(), str.to_glib_none().0, length))
@@ -203,13 +186,13 @@ pub fn compute_checksum_for_string(checksum_type: ChecksumType, str: &str) -> Op
 }
 
 #[cfg(any(feature = "v2_50", feature = "dox"))]
-pub fn compute_hmac_for_bytes(digest_type: ChecksumType, key: &Bytes, data: &Bytes) -> Option<String> {
+pub fn compute_hmac_for_bytes(digest_type: ChecksumType, key: &Bytes, data: &Bytes) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_compute_hmac_for_bytes(digest_type.to_glib(), key.to_glib_none().0, data.to_glib_none().0))
     }
 }
 
-pub fn compute_hmac_for_data(digest_type: ChecksumType, key: &[u8], data: &[u8]) -> Option<String> {
+pub fn compute_hmac_for_data(digest_type: ChecksumType, key: &[u8], data: &[u8]) -> Option<GString> {
     let key_len = key.len() as usize;
     let length = data.len() as usize;
     unsafe {
@@ -217,7 +200,7 @@ pub fn compute_hmac_for_data(digest_type: ChecksumType, key: &[u8], data: &[u8])
     }
 }
 
-pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str) -> Option<String> {
+pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str) -> Option<GString> {
     let key_len = key.len() as usize;
     let length = str.len() as isize;
     unsafe {
@@ -233,7 +216,7 @@ pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str)
 //    unsafe { TODO: call ffi::g_datalist_clear() }
 //}
 
-//pub fn datalist_foreach<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(datalist: /*Ignored*/&mut Data, func: /*Unknown conversion*//*Unimplemented*/DataForeachFunc, user_data: P) {
+//pub fn datalist_foreach(datalist: /*Ignored*/&mut Data, func: /*Unimplemented*/FnMut(Quark, /*Unimplemented*/Fundamental: Pointer), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_datalist_foreach() }
 //}
 
@@ -245,8 +228,7 @@ pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str)
 //    unsafe { TODO: call ffi::g_datalist_get_flags() }
 //}
 
-//#[cfg(any(feature = "v2_34", feature = "dox"))]
-//pub fn datalist_id_dup_data<'a, P: Into<Option<&'a /*Unimplemented*/DuplicateFunc>>, Q: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(datalist: /*Ignored*/&mut Data, key_id: Quark, dup_func: P, user_data: Q) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn datalist_id_dup_data(datalist: /*Ignored*/&mut Data, key_id: Quark, dup_func: /*Unimplemented*/FnMut(/*Unimplemented*/Fundamental: Pointer) -> /*Unimplemented*/Fundamental: Pointer, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_datalist_id_dup_data() }
 //}
 
@@ -258,12 +240,11 @@ pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str)
 //    unsafe { TODO: call ffi::g_datalist_id_remove_no_notify() }
 //}
 
-//#[cfg(any(feature = "v2_34", feature = "dox"))]
-//pub fn datalist_id_replace_data<'a, P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option</*Unimplemented*/Fundamental: Pointer>>, R: Into<Option<&'a /*Unimplemented*/DestroyNotify>>>(datalist: /*Ignored*/&mut Data, key_id: Quark, oldval: P, newval: Q, destroy: R) -> bool {
+//pub fn datalist_id_replace_data(datalist: /*Ignored*/&mut Data, key_id: Quark, oldval: /*Unimplemented*/Option<Fundamental: Pointer>, newval: /*Unimplemented*/Option<Fundamental: Pointer>) -> Option<Fn() + 'static> {
 //    unsafe { TODO: call ffi::g_datalist_id_replace_data() }
 //}
 
-//pub fn datalist_id_set_data_full<'a, P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option<&'a /*Unimplemented*/DestroyNotify>>>(datalist: /*Ignored*/&mut Data, key_id: Quark, data: P, destroy_func: Q) {
+//pub fn datalist_id_set_data_full(datalist: /*Ignored*/&mut Data, key_id: Quark, data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_datalist_id_set_data_full() }
 //}
 
@@ -283,7 +264,7 @@ pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str)
 //    unsafe { TODO: call ffi::g_dataset_destroy() }
 //}
 
-//pub fn dataset_foreach<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(dataset_location: /*Unimplemented*/Fundamental: Pointer, func: /*Unknown conversion*//*Unimplemented*/DataForeachFunc, user_data: P) {
+//pub fn dataset_foreach(dataset_location: /*Unimplemented*/Fundamental: Pointer, func: /*Unimplemented*/FnMut(Quark, /*Unimplemented*/Fundamental: Pointer), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_dataset_foreach() }
 //}
 
@@ -295,39 +276,36 @@ pub fn compute_hmac_for_string(digest_type: ChecksumType, key: &[u8], str: &str)
 //    unsafe { TODO: call ffi::g_dataset_id_remove_no_notify() }
 //}
 
-//pub fn dataset_id_set_data_full<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(dataset_location: /*Unimplemented*/Fundamental: Pointer, key_id: Quark, data: P, destroy_func: /*Unknown conversion*//*Unimplemented*/DestroyNotify) {
+//pub fn dataset_id_set_data_full(dataset_location: /*Unimplemented*/Fundamental: Pointer, key_id: Quark, data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_dataset_id_set_data_full() }
 //}
 
-pub fn dcgettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str, category: i32) -> Option<String> {
+pub fn dcgettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str, category: i32) -> Option<GString> {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     unsafe {
-        from_glib_none(ffi::g_dcgettext(domain.0, msgid.to_glib_none().0, category))
+        from_glib_none(ffi::g_dcgettext(domain.to_glib_none().0, msgid.to_glib_none().0, category))
     }
 }
 
-pub fn dgettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str) -> Option<String> {
+pub fn dgettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str) -> Option<GString> {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     unsafe {
-        from_glib_none(ffi::g_dgettext(domain.0, msgid.to_glib_none().0))
+        from_glib_none(ffi::g_dgettext(domain.to_glib_none().0, msgid.to_glib_none().0))
     }
 }
 
-//pub fn direct_equal<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(v1: P, v2: Q) -> bool {
+//pub fn direct_equal(v1: /*Unimplemented*/Option<Fundamental: Pointer>, v2: /*Unimplemented*/Option<Fundamental: Pointer>) -> bool {
 //    unsafe { TODO: call ffi::g_direct_equal() }
 //}
 
-//pub fn direct_hash<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(v: P) -> u32 {
+//pub fn direct_hash(v: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
 //    unsafe { TODO: call ffi::g_direct_hash() }
 //}
 
-pub fn dngettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str, msgid_plural: &str, n: libc::c_ulong) -> Option<String> {
+pub fn dngettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str, msgid_plural: &str, n: libc::c_ulong) -> Option<GString> {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     unsafe {
-        from_glib_none(ffi::g_dngettext(domain.0, msgid.to_glib_none().0, msgid_plural.to_glib_none().0, n))
+        from_glib_none(ffi::g_dngettext(domain.to_glib_none().0, msgid.to_glib_none().0, msgid_plural.to_glib_none().0, n))
     }
 }
 
@@ -339,19 +317,17 @@ pub fn dngettext<'a, P: Into<Option<&'a str>>>(domain: P, msgid: &str, msgid_plu
 //    unsafe { TODO: call ffi::g_double_hash() }
 //}
 
-pub fn dpgettext<'a, P: Into<Option<&'a str>>>(domain: P, msgctxtid: &str, msgidoffset: usize) -> Option<String> {
+pub fn dpgettext<'a, P: Into<Option<&'a str>>>(domain: P, msgctxtid: &str, msgidoffset: usize) -> Option<GString> {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     unsafe {
-        from_glib_none(ffi::g_dpgettext(domain.0, msgctxtid.to_glib_none().0, msgidoffset))
+        from_glib_none(ffi::g_dpgettext(domain.to_glib_none().0, msgctxtid.to_glib_none().0, msgidoffset))
     }
 }
 
-pub fn dpgettext2<'a, P: Into<Option<&'a str>>>(domain: P, context: &str, msgid: &str) -> Option<String> {
+pub fn dpgettext2<'a, P: Into<Option<&'a str>>>(domain: P, context: &str, msgid: &str) -> Option<GString> {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     unsafe {
-        from_glib_none(ffi::g_dpgettext2(domain.0, context.to_glib_none().0, msgid.to_glib_none().0))
+        from_glib_none(ffi::g_dpgettext2(domain.to_glib_none().0, context.to_glib_none().0, msgid.to_glib_none().0))
     }
 }
 
@@ -401,32 +377,25 @@ pub fn file_test<P: AsRef<std::path::Path>>(filename: P, test: FileTest) -> bool
     }
 }
 
-pub fn filename_display_basename<P: AsRef<std::path::Path>>(filename: P) -> Option<String> {
+pub fn filename_display_basename<P: AsRef<std::path::Path>>(filename: P) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_filename_display_basename(filename.as_ref().to_glib_none().0))
     }
 }
 
-pub fn filename_display_name<P: AsRef<std::path::Path>>(filename: P) -> Option<String> {
+pub fn filename_display_name<P: AsRef<std::path::Path>>(filename: P) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_filename_display_name(filename.as_ref().to_glib_none().0))
     }
 }
 
-pub fn format_size(size: u64) -> Option<String> {
+pub fn format_size(size: u64) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_format_size(size))
     }
 }
 
-#[deprecated]
-pub fn format_size_for_display(size: i64) -> Option<String> {
-    unsafe {
-        from_glib_full(ffi::g_format_size_for_display(size))
-    }
-}
-
-pub fn format_size_full(size: u64, flags: FormatSizeFlags) -> Option<String> {
+pub fn format_size_full(size: u64, flags: FormatSizeFlags) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_format_size_full(size, flags.to_glib()))
     }
@@ -436,17 +405,17 @@ pub fn format_size_full(size: u64, flags: FormatSizeFlags) -> Option<String> {
 //    unsafe { TODO: call ffi::g_fprintf() }
 //}
 
-//pub fn free<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(mem: P) {
+//pub fn free(mem: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_free() }
 //}
 
-pub fn get_application_name() -> Option<String> {
+pub fn get_application_name() -> Option<GString> {
     unsafe {
         from_glib_none(ffi::g_get_application_name())
     }
 }
 
-pub fn get_charset() -> Option<String> {
+pub fn get_charset() -> Option<GString> {
     unsafe {
         let mut charset = ptr::null();
         let ret = from_glib(ffi::g_get_charset(&mut charset));
@@ -454,7 +423,7 @@ pub fn get_charset() -> Option<String> {
     }
 }
 
-pub fn get_codeset() -> Option<String> {
+pub fn get_codeset() -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_get_codeset())
     }
@@ -470,19 +439,26 @@ pub fn get_environ() -> Vec<std::ffi::OsString> {
     }
 }
 
-pub fn get_host_name() -> Option<String> {
+pub fn get_host_name() -> Option<GString> {
     unsafe {
         from_glib_none(ffi::g_get_host_name())
     }
 }
 
-pub fn get_language_names() -> Vec<String> {
+pub fn get_language_names() -> Vec<GString> {
     unsafe {
         FromGlibPtrContainer::from_glib_none(ffi::g_get_language_names())
     }
 }
 
-pub fn get_locale_variants(locale: &str) -> Vec<String> {
+#[cfg(any(feature = "v2_58", feature = "dox"))]
+pub fn get_language_names_with_category(category_name: &str) -> Vec<GString> {
+    unsafe {
+        FromGlibPtrContainer::from_glib_none(ffi::g_get_language_names_with_category(category_name.to_glib_none().0))
+    }
+}
+
+pub fn get_locale_variants(locale: &str) -> Vec<GString> {
     unsafe {
         FromGlibPtrContainer::from_glib_full(ffi::g_get_locale_variants(locale.to_glib_none().0))
     }
@@ -494,7 +470,6 @@ pub fn get_monotonic_time() -> i64 {
     }
 }
 
-#[cfg(any(feature = "v2_36", feature = "dox"))]
 pub fn get_num_processors() -> u32 {
     unsafe {
         ffi::g_get_num_processors()
@@ -567,13 +542,13 @@ pub fn hostname_is_non_ascii(hostname: &str) -> bool {
     }
 }
 
-pub fn hostname_to_ascii(hostname: &str) -> Option<String> {
+pub fn hostname_to_ascii(hostname: &str) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_hostname_to_ascii(hostname.to_glib_none().0))
     }
 }
 
-pub fn hostname_to_unicode(hostname: &str) -> Option<String> {
+pub fn hostname_to_unicode(hostname: &str) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_hostname_to_unicode(hostname.to_glib_none().0))
     }
@@ -583,15 +558,7 @@ pub fn hostname_to_unicode(hostname: &str) -> Option<String> {
 //    unsafe { TODO: call ffi::g_iconv() }
 //}
 
-//pub fn idle_add<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(function: /*Unknown conversion*//*Unimplemented*/SourceFunc, data: P) -> u32 {
-//    unsafe { TODO: call ffi::g_idle_add() }
-//}
-
-//pub fn idle_add_full<'a, P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option<&'a /*Unimplemented*/DestroyNotify>>>(priority: i32, function: /*Unknown conversion*//*Unimplemented*/SourceFunc, data: P, notify: Q) -> u32 {
-//    unsafe { TODO: call ffi::g_idle_add_full() }
-//}
-
-//pub fn idle_remove_by_data<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(data: P) -> bool {
+//pub fn idle_remove_by_data(data: /*Unimplemented*/Option<Fundamental: Pointer>) -> bool {
 //    unsafe { TODO: call ffi::g_idle_remove_by_data() }
 //}
 
@@ -611,11 +578,11 @@ pub fn hostname_to_unicode(hostname: &str) -> Option<String> {
 //    unsafe { TODO: call ffi::g_int_hash() }
 //}
 
-//pub fn io_add_watch<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(channel: /*Ignored*/&IOChannel, condition: IOCondition, func: /*Unknown conversion*//*Unimplemented*/IOFunc, user_data: P) -> u32 {
+//pub fn io_add_watch(channel: /*Ignored*/&IOChannel, condition: IOCondition, func: /*Unimplemented*/Fn(/*Ignored*/IOChannel, &IOCondition, /*Unimplemented*/Fundamental: Pointer) -> bool, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
 //    unsafe { TODO: call ffi::g_io_add_watch() }
 //}
 
-//pub fn io_add_watch_full(channel: /*Ignored*/&IOChannel, priority: i32, condition: IOCondition, func: /*Unknown conversion*//*Unimplemented*/IOFunc, notify: /*Unknown conversion*//*Unimplemented*/DestroyNotify) -> u32 {
+//pub fn io_add_watch_full(channel: /*Ignored*/&IOChannel, priority: i32, condition: IOCondition, func: /*Unimplemented*/Fn(/*Ignored*/IOChannel, &IOCondition, /*Unimplemented*/Fundamental: Pointer) -> bool, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
 //    unsafe { TODO: call ffi::g_io_add_watch_full() }
 //}
 
@@ -633,7 +600,7 @@ pub fn listenv() -> Vec<std::ffi::OsString> {
 //    unsafe { TODO: call ffi::g_log() }
 //}
 
-//pub fn log_default_handler<'a, 'b, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>, R: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_domain: P, log_level: /*Ignored*/LogLevelFlags, message: Q, unused_data: R) {
+//pub fn log_default_handler<'a, 'b, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>>(log_domain: P, log_level: /*Ignored*/LogLevelFlags, message: Q, unused_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_log_default_handler() }
 //}
 
@@ -647,7 +614,7 @@ pub fn log_remove_handler(log_domain: &str, handler_id: u32) {
 //    unsafe { TODO: call ffi::g_log_set_always_fatal() }
 //}
 
-//pub fn log_set_default_handler<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_func: /*Unknown conversion*//*Unimplemented*/LogFunc, user_data: P) -> /*Unknown conversion*//*Unimplemented*/LogFunc {
+//pub fn log_set_default_handler(log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str) {
 //    unsafe { TODO: call ffi::g_log_set_default_handler() }
 //}
 
@@ -655,17 +622,17 @@ pub fn log_remove_handler(log_domain: &str, handler_id: u32) {
 //    unsafe { TODO: call ffi::g_log_set_fatal_mask() }
 //}
 
-//pub fn log_set_handler<'a, P: Into<Option<&'a str>>, Q: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_domain: P, log_levels: /*Ignored*/LogLevelFlags, log_func: /*Unknown conversion*//*Unimplemented*/LogFunc, user_data: Q) -> u32 {
+//pub fn log_set_handler<'a, P: Into<Option<&'a str>>>(log_domain: P, log_levels: /*Ignored*/LogLevelFlags, log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
 //    unsafe { TODO: call ffi::g_log_set_handler() }
 //}
 
 //#[cfg(any(feature = "v2_46", feature = "dox"))]
-//pub fn log_set_handler_full<'a, P: Into<Option<&'a str>>>(log_domain: P, log_levels: /*Ignored*/LogLevelFlags, log_func: /*Unknown conversion*//*Unimplemented*/LogFunc, destroy: /*Unknown conversion*//*Unimplemented*/DestroyNotify) -> u32 {
+//pub fn log_set_handler_full<'a, P: Into<Option<&'a str>>>(log_domain: P, log_levels: /*Ignored*/LogLevelFlags, log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
 //    unsafe { TODO: call ffi::g_log_set_handler_full() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_set_writer_func<'a, P: Into<Option<&'a /*Unimplemented*/LogWriterFunc>>>(func: P, user_data_free: /*Unknown conversion*//*Unimplemented*/DestroyNotify) {
+//pub fn log_set_writer_func(func: /*Unimplemented*/Fn(/*Ignored*/LogLevelFlags, /*Ignored*/Vec<LogField>, usize) -> /*Ignored*/LogWriterOutput, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_log_set_writer_func() }
 //}
 
@@ -689,22 +656,22 @@ pub fn log_remove_handler(log_domain: &str, handler_id: u32) {
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_default<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: P) -> /*Ignored*/LogWriterOutput {
+//pub fn log_writer_default(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
 //    unsafe { TODO: call ffi::g_log_writer_default() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_format_fields(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], use_color: bool) -> Option<String> {
+//pub fn log_writer_format_fields(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], use_color: bool) -> Option<GString> {
 //    unsafe { TODO: call ffi::g_log_writer_format_fields() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_journald<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: P) -> /*Ignored*/LogWriterOutput {
+//pub fn log_writer_journald(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
 //    unsafe { TODO: call ffi::g_log_writer_journald() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_standard_streams<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: P) -> /*Ignored*/LogWriterOutput {
+//pub fn log_writer_standard_streams(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
 //    unsafe { TODO: call ffi::g_log_writer_standard_streams() }
 //}
 
@@ -744,18 +711,18 @@ pub fn main_depth() -> i32 {
 //    unsafe { TODO: call ffi::g_markup_collect_attributes() }
 //}
 
-pub fn markup_escape_text(text: &str) -> String {
+pub fn markup_escape_text(text: &str) -> GString {
     let length = text.len() as isize;
     unsafe {
         from_glib_full(ffi::g_markup_escape_text(text.to_glib_none().0, length))
     }
 }
 
-//pub fn markup_printf_escaped(format: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) -> Option<String> {
+//pub fn markup_printf_escaped(format: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) -> Option<GString> {
 //    unsafe { TODO: call ffi::g_markup_printf_escaped() }
 //}
 
-//pub fn markup_vprintf_escaped(format: &str, args: /*Unknown conversion*//*Unimplemented*/Unsupported) -> Option<String> {
+//pub fn markup_vprintf_escaped(format: &str, args: /*Unknown conversion*//*Unimplemented*/Unsupported) -> Option<GString> {
 //    unsafe { TODO: call ffi::g_markup_vprintf_escaped() }
 //}
 
@@ -778,7 +745,7 @@ pub fn mem_profile() {
 //    unsafe { TODO: call ffi::g_mem_set_vtable() }
 //}
 
-//pub fn memdup<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(mem: P, byte_size: u32) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn memdup(mem: /*Unimplemented*/Option<Fundamental: Pointer>, byte_size: u32) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_memdup() }
 //}
 
@@ -904,7 +871,7 @@ pub fn pattern_match_simple(pattern: &str, string: &str) -> bool {
 //    unsafe { TODO: call ffi::g_propagate_prefixed_error() }
 //}
 
-//pub fn qsort_with_data<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(pbase: /*Unimplemented*/Fundamental: Pointer, total_elems: i32, size: usize, compare_func: /*Unknown conversion*//*Unimplemented*/CompareDataFunc, user_data: P) {
+//pub fn qsort_with_data(pbase: /*Unimplemented*/Fundamental: Pointer, total_elems: i32, size: usize, compare_func: /*Unimplemented*/Fn(/*Unimplemented*/Fundamental: Pointer, /*Unimplemented*/Fundamental: Pointer) -> i32, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_qsort_with_data() }
 //}
 
@@ -938,11 +905,11 @@ pub fn random_set_seed(seed: u32) {
     }
 }
 
-//pub fn realloc<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(mem: P, n_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn realloc(mem: /*Unimplemented*/Option<Fundamental: Pointer>, n_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_realloc() }
 //}
 
-//pub fn realloc_n<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(mem: P, n_blocks: usize, n_block_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn realloc_n(mem: /*Unimplemented*/Option<Fundamental: Pointer>, n_blocks: usize, n_block_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_realloc_n() }
 //}
 
@@ -954,11 +921,9 @@ pub fn reload_user_special_dirs_cache() {
 
 pub fn return_if_fail_warning<'a, 'b, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>>(log_domain: P, pretty_function: &str, expression: Q) {
     let log_domain = log_domain.into();
-    let log_domain = log_domain.to_glib_none();
     let expression = expression.into();
-    let expression = expression.to_glib_none();
     unsafe {
-        ffi::g_return_if_fail_warning(log_domain.0, pretty_function.to_glib_none().0, expression.0);
+        ffi::g_return_if_fail_warning(log_domain.to_glib_none().0, pretty_function.to_glib_none().0, expression.to_glib_none().0);
     }
 }
 
@@ -978,11 +943,11 @@ pub fn set_application_name(application_name: &str) {
 //    unsafe { TODO: call ffi::g_set_error() }
 //}
 
-//pub fn set_print_handler(func: /*Unknown conversion*//*Unimplemented*/PrintFunc) -> /*Unknown conversion*//*Unimplemented*/PrintFunc {
+//pub fn set_print_handler<P: Fn(&str) + Send + Sync + 'static>(func: P) -> Option<Box<dyn Fn(&str) + 'static>> {
 //    unsafe { TODO: call ffi::g_set_print_handler() }
 //}
 
-//pub fn set_printerr_handler(func: /*Unknown conversion*//*Unimplemented*/PrintFunc) -> /*Unknown conversion*//*Unimplemented*/PrintFunc {
+//pub fn set_printerr_handler<P: Fn(&str) + Send + Sync + 'static>(func: P) -> Option<Box<dyn Fn(&str) + 'static>> {
 //    unsafe { TODO: call ffi::g_set_printerr_handler() }
 //}
 
@@ -1018,15 +983,15 @@ pub fn shell_unquote<P: AsRef<std::ffi::OsStr>>(quoted_string: P) -> Result<std:
 //    unsafe { TODO: call ffi::g_slice_alloc0() }
 //}
 
-//pub fn slice_copy<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(block_size: usize, mem_block: P) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn slice_copy(block_size: usize, mem_block: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_slice_copy() }
 //}
 
-//pub fn slice_free1<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(block_size: usize, mem_block: P) {
+//pub fn slice_free1(block_size: usize, mem_block: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_slice_free1() }
 //}
 
-//pub fn slice_free_chain_with_offset<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(block_size: usize, mem_chain: P, next_offset: usize) {
+//pub fn slice_free_chain_with_offset(block_size: usize, mem_chain: /*Unimplemented*/Option<Fundamental: Pointer>, next_offset: usize) {
 //    unsafe { TODO: call ffi::g_slice_free_chain_with_offset() }
 //}
 
@@ -1052,15 +1017,19 @@ pub fn spaced_primes_closest(num: u32) -> u32 {
     }
 }
 
-//pub fn spawn_async<'a, P: AsRef<std::path::Path>, Q: Into<Option<&'a /*Unimplemented*/SpawnChildSetupFunc>>>(working_directory: P, argv: &[&std::path::Path], envp: &[&std::path::Path], flags: /*Ignored*/SpawnFlags, child_setup: Q) -> Result<Pid, Error> {
+//pub fn spawn_async<P: AsRef<std::path::Path>>(working_directory: P, argv: &[&std::path::Path], envp: &[&std::path::Path], flags: /*Ignored*/SpawnFlags, child_setup: Option<Box<dyn FnOnce() + 'static>>) -> Result<Pid, Error> {
 //    unsafe { TODO: call ffi::g_spawn_async() }
 //}
 
-//pub fn spawn_async_with_pipes<'a, P: AsRef<std::path::Path>, Q: Into<Option<&'a /*Unimplemented*/SpawnChildSetupFunc>>>(working_directory: P, argv: &[&std::path::Path], envp: &[&std::path::Path], flags: /*Ignored*/SpawnFlags, child_setup: Q) -> Result<(Pid, i32, i32, i32), Error> {
+//#[cfg(any(feature = "v2_58", feature = "dox"))]
+//pub fn spawn_async_with_fds<P: AsRef<std::path::Path>>(working_directory: P, argv: &[&str], envp: &[&str], flags: /*Ignored*/SpawnFlags, child_setup: Option<Box<dyn FnOnce() + 'static>>, stdin_fd: i32, stdout_fd: i32, stderr_fd: i32) -> Result<Pid, Error> {
+//    unsafe { TODO: call ffi::g_spawn_async_with_fds() }
+//}
+
+//pub fn spawn_async_with_pipes<P: AsRef<std::path::Path>>(working_directory: P, argv: &[&std::path::Path], envp: &[&std::path::Path], flags: /*Ignored*/SpawnFlags, child_setup: Option<Box<dyn FnOnce() + 'static>>) -> Result<(Pid, i32, i32, i32), Error> {
 //    unsafe { TODO: call ffi::g_spawn_async_with_pipes() }
 //}
 
-#[cfg(any(feature = "v2_34", feature = "dox"))]
 pub fn spawn_check_exit_status(exit_status: i32) -> Result<(), Error> {
     unsafe {
         let mut error = ptr::null_mut();
@@ -1082,7 +1051,7 @@ pub fn spawn_command_line_async<P: AsRef<std::ffi::OsStr>>(command_line: P) -> R
 //    unsafe { TODO: call ffi::g_spawn_command_line_sync() }
 //}
 
-//pub fn spawn_sync<'a, P: AsRef<std::path::Path>, Q: Into<Option<&'a /*Unimplemented*/SpawnChildSetupFunc>>>(working_directory: P, argv: &[&std::path::Path], envp: &[&std::path::Path], flags: /*Ignored*/SpawnFlags, child_setup: Q) -> Result<i32, Error> {
+//pub fn spawn_sync<P: AsRef<std::path::Path>>(working_directory: P, argv: &[&std::path::Path], envp: &[&std::path::Path], flags: /*Ignored*/SpawnFlags, child_setup: Option<Box<dyn FnOnce() + 'static>>, standard_output: Vec<u8>, standard_error: Vec<u8>) -> Result<i32, Error> {
 //    unsafe { TODO: call ffi::g_spawn_sync() }
 //}
 
@@ -1090,26 +1059,25 @@ pub fn spawn_command_line_async<P: AsRef<std::ffi::OsStr>>(command_line: P) -> R
 //    unsafe { TODO: call ffi::g_sprintf() }
 //}
 
-pub fn stpcpy(dest: &str, src: &str) -> Option<String> {
+pub fn stpcpy(dest: &str, src: &str) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_stpcpy(dest.to_glib_none().0, src.to_glib_none().0))
     }
 }
 
-//pub fn test_add_data_func<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(testpath: &str, test_data: P, test_func: /*Unknown conversion*//*Unimplemented*/TestDataFunc) {
+//pub fn test_add_data_func<P: FnOnce() + Send + Sync + 'static>(testpath: &str, test_data: /*Unimplemented*/Option<Fundamental: Pointer>, test_func: P) {
 //    unsafe { TODO: call ffi::g_test_add_data_func() }
 //}
 
-//#[cfg(any(feature = "v2_34", feature = "dox"))]
-//pub fn test_add_data_func_full<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(testpath: &str, test_data: P, test_func: /*Unknown conversion*//*Unimplemented*/TestDataFunc, data_free_func: /*Unknown conversion*//*Unimplemented*/DestroyNotify) {
+//pub fn test_add_data_func_full<P: Fn() + Send + Sync + 'static>(testpath: &str, test_data: /*Unimplemented*/Option<Fundamental: Pointer>, test_func: P) {
 //    unsafe { TODO: call ffi::g_test_add_data_func_full() }
 //}
 
-//pub fn test_add_func(testpath: &str, test_func: /*Unknown conversion*//*Unimplemented*/TestFunc) {
+//pub fn test_add_func<P: FnOnce() + Send + Sync + 'static>(testpath: &str, test_func: P) {
 //    unsafe { TODO: call ffi::g_test_add_func() }
 //}
 
-//pub fn test_add_vtable<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(testpath: &str, data_size: usize, test_data: P, data_setup: /*Unknown conversion*//*Unimplemented*/TestFixtureFunc, data_test: /*Unknown conversion*//*Unimplemented*/TestFixtureFunc, data_teardown: /*Unknown conversion*//*Unimplemented*/TestFixtureFunc) {
+//pub fn test_add_vtable(testpath: &str, data_size: usize, test_data: /*Unimplemented*/Option<Fundamental: Pointer>, data_setup: /*Unimplemented*/Fn(/*Unimplemented*/Fundamental: Pointer), data_test: /*Unimplemented*/Fn(/*Unimplemented*/Fundamental: Pointer), data_teardown: /*Unimplemented*/Fn(/*Unimplemented*/Fundamental: Pointer)) {
 //    unsafe { TODO: call ffi::g_test_add_vtable() }
 //}
 
@@ -1131,12 +1099,11 @@ pub fn test_bug_base(uri_pattern: &str) {
     }
 }
 
-//#[cfg(any(feature = "v2_38", feature = "dox"))]
-//pub fn test_build_filename(file_type: /*Ignored*/TestFileType, first_path: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) -> Option<String> {
+//pub fn test_build_filename(file_type: /*Ignored*/TestFileType, first_path: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) -> Option<GString> {
 //    unsafe { TODO: call ffi::g_test_build_filename() }
 //}
 
-//pub fn test_create_case<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(test_name: &str, data_size: usize, test_data: P, data_setup: /*Unknown conversion*//*Unimplemented*/TestFixtureFunc, data_test: /*Unknown conversion*//*Unimplemented*/TestFixtureFunc, data_teardown: /*Unknown conversion*//*Unimplemented*/TestFixtureFunc) -> /*Ignored*/Option<TestCase> {
+//pub fn test_create_case(test_name: &str, data_size: usize, test_data: /*Unimplemented*/Option<Fundamental: Pointer>, data_setup: /*Unimplemented*/FnOnce(/*Unimplemented*/Fundamental: Pointer), data_test: /*Unimplemented*/FnOnce(/*Unimplemented*/Fundamental: Pointer), data_teardown: /*Unimplemented*/FnOnce(/*Unimplemented*/Fundamental: Pointer)) -> /*Ignored*/Option<TestCase> {
 //    unsafe { TODO: call ffi::g_test_create_case() }
 //}
 
@@ -1144,7 +1111,6 @@ pub fn test_bug_base(uri_pattern: &str) {
 //    unsafe { TODO: call ffi::g_test_create_suite() }
 //}
 
-//#[cfg(any(feature = "v2_34", feature = "dox"))]
 //pub fn test_expect_message<'a, P: Into<Option<&'a str>>>(log_domain: P, log_level: /*Ignored*/LogLevelFlags, pattern: &str) {
 //    unsafe { TODO: call ffi::g_test_expect_message() }
 //}
@@ -1155,20 +1121,17 @@ pub fn test_fail() {
     }
 }
 
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub fn test_failed() -> bool {
     unsafe {
         from_glib(ffi::g_test_failed())
     }
 }
 
-//#[cfg(any(feature = "v2_38", feature = "dox"))]
 //pub fn test_get_dir(file_type: /*Ignored*/TestFileType) -> Option<std::path::PathBuf> {
 //    unsafe { TODO: call ffi::g_test_get_dir() }
 //}
 
-//#[cfg(any(feature = "v2_38", feature = "dox"))]
-//pub fn test_get_filename(file_type: /*Ignored*/TestFileType, first_path: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) -> Option<String> {
+//pub fn test_get_filename(file_type: /*Ignored*/TestFileType, first_path: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) -> Option<GString> {
 //    unsafe { TODO: call ffi::g_test_get_filename() }
 //}
 
@@ -1176,12 +1139,10 @@ pub fn test_failed() -> bool {
 //    unsafe { TODO: call ffi::g_test_get_root() }
 //}
 
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub fn test_incomplete<'a, P: Into<Option<&'a str>>>(msg: P) {
     let msg = msg.into();
-    let msg = msg.to_glib_none();
     unsafe {
-        ffi::g_test_incomplete(msg.0);
+        ffi::g_test_incomplete(msg.to_glib_none().0);
     }
 }
 
@@ -1189,11 +1150,11 @@ pub fn test_incomplete<'a, P: Into<Option<&'a str>>>(msg: P) {
 //    unsafe { TODO: call ffi::g_test_init() }
 //}
 
-//pub fn test_log_set_fatal_handler<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(log_func: /*Unknown conversion*//*Unimplemented*/TestLogFatalFunc, user_data: P) {
+//pub fn test_log_set_fatal_handler(log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str) -> bool, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_test_log_set_fatal_handler() }
 //}
 
-//pub fn test_log_type_name(log_type: /*Ignored*/TestLogType) -> Option<String> {
+//pub fn test_log_type_name(log_type: /*Ignored*/TestLogType) -> Option<GString> {
 //    unsafe { TODO: call ffi::g_test_log_type_name() }
 //}
 
@@ -1209,11 +1170,11 @@ pub fn test_incomplete<'a, P: Into<Option<&'a str>>>(msg: P) {
 //    unsafe { TODO: call ffi::g_test_minimized_result() }
 //}
 
-//pub fn test_queue_destroy<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(destroy_func: /*Unknown conversion*//*Unimplemented*/DestroyNotify, destroy_data: P) {
+//pub fn test_queue_destroy(destroy_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_test_queue_destroy() }
 //}
 
-//pub fn test_queue_free<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(gfree_pointer: P) {
+//pub fn test_queue_free(gfree_pointer: /*Unimplemented*/Option<Fundamental: Pointer>) {
 //    unsafe { TODO: call ffi::g_test_queue_free() }
 //}
 
@@ -1251,23 +1212,19 @@ pub fn test_run() -> i32 {
 //    unsafe { TODO: call ffi::g_test_run_suite() }
 //}
 
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub fn test_set_nonfatal_assertions() {
     unsafe {
         ffi::g_test_set_nonfatal_assertions();
     }
 }
 
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub fn test_skip<'a, P: Into<Option<&'a str>>>(msg: P) {
     let msg = msg.into();
-    let msg = msg.to_glib_none();
     unsafe {
-        ffi::g_test_skip(msg.0);
+        ffi::g_test_skip(msg.to_glib_none().0);
     }
 }
 
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub fn test_subprocess() -> bool {
     unsafe {
         from_glib(ffi::g_test_subprocess())
@@ -1314,25 +1271,8 @@ pub fn test_trap_reached_timeout() -> bool {
     }
 }
 
-//#[cfg(any(feature = "v2_38", feature = "dox"))]
 //pub fn test_trap_subprocess<'a, P: Into<Option<&'a str>>>(test_path: P, usec_timeout: u64, test_flags: /*Ignored*/TestSubprocessFlags) {
 //    unsafe { TODO: call ffi::g_test_trap_subprocess() }
-//}
-
-//pub fn timeout_add<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(interval: u32, function: /*Unknown conversion*//*Unimplemented*/SourceFunc, data: P) -> u32 {
-//    unsafe { TODO: call ffi::g_timeout_add() }
-//}
-
-//pub fn timeout_add_full<'a, P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option<&'a /*Unimplemented*/DestroyNotify>>>(priority: i32, interval: u32, function: /*Unknown conversion*//*Unimplemented*/SourceFunc, data: P, notify: Q) -> u32 {
-//    unsafe { TODO: call ffi::g_timeout_add_full() }
-//}
-
-//pub fn timeout_add_seconds<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(interval: u32, function: /*Unknown conversion*//*Unimplemented*/SourceFunc, data: P) -> u32 {
-//    unsafe { TODO: call ffi::g_timeout_add_seconds() }
-//}
-
-//pub fn timeout_add_seconds_full<'a, P: Into<Option</*Unimplemented*/Fundamental: Pointer>>, Q: Into<Option<&'a /*Unimplemented*/DestroyNotify>>>(priority: i32, interval: u32, function: /*Unknown conversion*//*Unimplemented*/SourceFunc, data: P, notify: Q) -> u32 {
-//    unsafe { TODO: call ffi::g_timeout_add_seconds_full() }
 //}
 
 //pub fn try_malloc(n_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
@@ -1351,11 +1291,11 @@ pub fn test_trap_reached_timeout() -> bool {
 //    unsafe { TODO: call ffi::g_try_malloc_n() }
 //}
 
-//pub fn try_realloc<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(mem: P, n_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn try_realloc(mem: /*Unimplemented*/Option<Fundamental: Pointer>, n_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_try_realloc() }
 //}
 
-//pub fn try_realloc_n<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(mem: P, n_blocks: usize, n_block_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
+//pub fn try_realloc_n(mem: /*Unimplemented*/Option<Fundamental: Pointer>, n_blocks: usize, n_block_bytes: usize) -> /*Unimplemented*/Option<Fundamental: Pointer> {
 //    unsafe { TODO: call ffi::g_try_realloc_n() }
 //}
 
@@ -1367,59 +1307,44 @@ pub fn test_trap_reached_timeout() -> bool {
 //    unsafe { TODO: call ffi::g_unicode_script_to_iso15924() }
 //}
 
-//#[cfg(any(unix, feature = "dox"))]
-//pub fn unix_signal_add<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(signum: i32, handler: /*Unknown conversion*//*Unimplemented*/SourceFunc, user_data: P) -> u32 {
-//    unsafe { TODO: call ffi::g_unix_signal_add() }
-//}
-
-//#[cfg(any(unix, feature = "dox"))]
-//pub fn unix_signal_add_full(priority: i32, signum: i32, handler: /*Unknown conversion*//*Unimplemented*/SourceFunc, notify: /*Unknown conversion*//*Unimplemented*/DestroyNotify) -> u32 {
-//    unsafe { TODO: call ffi::g_unix_signal_add_full() }
-//}
-
 pub fn unlink<P: AsRef<std::path::Path>>(filename: P) -> i32 {
     unsafe {
         ffi::g_unlink(filename.as_ref().to_glib_none().0)
     }
 }
 
-pub fn uri_escape_string<'a, P: Into<Option<&'a str>>>(unescaped: &str, reserved_chars_allowed: P, allow_utf8: bool) -> Option<String> {
+pub fn uri_escape_string<'a, P: Into<Option<&'a str>>>(unescaped: &str, reserved_chars_allowed: P, allow_utf8: bool) -> Option<GString> {
     let reserved_chars_allowed = reserved_chars_allowed.into();
-    let reserved_chars_allowed = reserved_chars_allowed.to_glib_none();
     unsafe {
-        from_glib_full(ffi::g_uri_escape_string(unescaped.to_glib_none().0, reserved_chars_allowed.0, allow_utf8.to_glib()))
+        from_glib_full(ffi::g_uri_escape_string(unescaped.to_glib_none().0, reserved_chars_allowed.to_glib_none().0, allow_utf8.to_glib()))
     }
 }
 
-pub fn uri_list_extract_uris(uri_list: &str) -> Vec<String> {
+pub fn uri_list_extract_uris(uri_list: &str) -> Vec<GString> {
     unsafe {
         FromGlibPtrContainer::from_glib_full(ffi::g_uri_list_extract_uris(uri_list.to_glib_none().0))
     }
 }
 
-pub fn uri_parse_scheme(uri: &str) -> Option<String> {
+pub fn uri_parse_scheme(uri: &str) -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_uri_parse_scheme(uri.to_glib_none().0))
     }
 }
 
-pub fn uri_unescape_segment<'a, 'b, 'c, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>, R: Into<Option<&'c str>>>(escaped_string: P, escaped_string_end: Q, illegal_characters: R) -> Option<String> {
+pub fn uri_unescape_segment<'a, 'b, 'c, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>, R: Into<Option<&'c str>>>(escaped_string: P, escaped_string_end: Q, illegal_characters: R) -> Option<GString> {
     let escaped_string = escaped_string.into();
-    let escaped_string = escaped_string.to_glib_none();
     let escaped_string_end = escaped_string_end.into();
-    let escaped_string_end = escaped_string_end.to_glib_none();
     let illegal_characters = illegal_characters.into();
-    let illegal_characters = illegal_characters.to_glib_none();
     unsafe {
-        from_glib_full(ffi::g_uri_unescape_segment(escaped_string.0, escaped_string_end.0, illegal_characters.0))
+        from_glib_full(ffi::g_uri_unescape_segment(escaped_string.to_glib_none().0, escaped_string_end.to_glib_none().0, illegal_characters.to_glib_none().0))
     }
 }
 
-pub fn uri_unescape_string<'a, P: Into<Option<&'a str>>>(escaped_string: &str, illegal_characters: P) -> Option<String> {
+pub fn uri_unescape_string<'a, P: Into<Option<&'a str>>>(escaped_string: &str, illegal_characters: P) -> Option<GString> {
     let illegal_characters = illegal_characters.into();
-    let illegal_characters = illegal_characters.to_glib_none();
     unsafe {
-        from_glib_full(ffi::g_uri_unescape_string(escaped_string.to_glib_none().0, illegal_characters.0))
+        from_glib_full(ffi::g_uri_unescape_string(escaped_string.to_glib_none().0, illegal_characters.to_glib_none().0))
     }
 }
 
@@ -1437,7 +1362,7 @@ pub fn uuid_string_is_valid(str: &str) -> bool {
 }
 
 #[cfg(any(feature = "v2_52", feature = "dox"))]
-pub fn uuid_string_random() -> Option<String> {
+pub fn uuid_string_random() -> Option<GString> {
     unsafe {
         from_glib_full(ffi::g_uuid_string_random())
     }
@@ -1471,10 +1396,8 @@ pub fn variant_get_gtype() -> types::Type {
 
 pub fn warn_message<'a, 'b, P: Into<Option<&'a str>>, Q: Into<Option<&'b str>>>(domain: P, file: &str, line: i32, func: &str, warnexpr: Q) {
     let domain = domain.into();
-    let domain = domain.to_glib_none();
     let warnexpr = warnexpr.into();
-    let warnexpr = warnexpr.to_glib_none();
     unsafe {
-        ffi::g_warn_message(domain.0, file.to_glib_none().0, line, func.to_glib_none().0, warnexpr.0);
+        ffi::g_warn_message(domain.to_glib_none().0, file.to_glib_none().0, line, func.to_glib_none().0, warnexpr.to_glib_none().0);
     }
 }

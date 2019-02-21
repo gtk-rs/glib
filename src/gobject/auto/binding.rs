@@ -3,20 +3,14 @@
 // DO NOT EDIT
 
 use BindingFlags;
+use GString;
 use Object;
 use gobject_ffi as ffi;
-use ffi as glib_ffi;
-use gobject_ffi;
-use signal::SignalHandlerId;
-use signal::connect;
-use std::boxed::Box as Box_;
-use std::mem;
-use std::mem::transmute;
-use std::ptr;
+use std::fmt;
 use translate::*;
 
 glib_wrapper! {
-    pub struct Binding(Object<ffi::GBinding>);
+    pub struct Binding(Object<ffi::GBinding, BindingClass>);
 
     match fn {
         get_type => || ffi::g_binding_get_type(),
@@ -36,7 +30,7 @@ impl Binding {
         }
     }
 
-    pub fn get_source_property(&self) -> Option<String> {
+    pub fn get_source_property(&self) -> Option<GString> {
         unsafe {
             from_glib_none(ffi::g_binding_get_source_property(self.to_glib_none().0))
         }
@@ -48,56 +42,15 @@ impl Binding {
         }
     }
 
-    pub fn get_target_property(&self) -> Option<String> {
+    pub fn get_target_property(&self) -> Option<GString> {
         unsafe {
             from_glib_none(ffi::g_binding_get_target_property(self.to_glib_none().0))
         }
     }
 
-    #[cfg(any(feature = "v2_38", feature = "dox"))]
     pub fn unbind(&self) {
         unsafe {
             ffi::g_binding_unbind(self.to_glib_full());
-        }
-    }
-
-    pub fn connect_property_flags_notify<F: Fn(&Binding) + Send + Sync + 'static>(&self, f: F) -> SignalHandlerId {
-        unsafe {
-            let f: Box_<Box_<Fn(&Binding) + Send + Sync + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "notify::flags",
-                transmute(notify_flags_trampoline as usize), Box_::into_raw(f) as *mut _)
-        }
-    }
-
-    pub fn connect_property_source_notify<F: Fn(&Binding) + Send + Sync + 'static>(&self, f: F) -> SignalHandlerId {
-        unsafe {
-            let f: Box_<Box_<Fn(&Binding) + Send + Sync + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "notify::source",
-                transmute(notify_source_trampoline as usize), Box_::into_raw(f) as *mut _)
-        }
-    }
-
-    pub fn connect_property_source_property_notify<F: Fn(&Binding) + Send + Sync + 'static>(&self, f: F) -> SignalHandlerId {
-        unsafe {
-            let f: Box_<Box_<Fn(&Binding) + Send + Sync + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "notify::source-property",
-                transmute(notify_source_property_trampoline as usize), Box_::into_raw(f) as *mut _)
-        }
-    }
-
-    pub fn connect_property_target_notify<F: Fn(&Binding) + Send + Sync + 'static>(&self, f: F) -> SignalHandlerId {
-        unsafe {
-            let f: Box_<Box_<Fn(&Binding) + Send + Sync + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "notify::target",
-                transmute(notify_target_trampoline as usize), Box_::into_raw(f) as *mut _)
-        }
-    }
-
-    pub fn connect_property_target_property_notify<F: Fn(&Binding) + Send + Sync + 'static>(&self, f: F) -> SignalHandlerId {
-        unsafe {
-            let f: Box_<Box_<Fn(&Binding) + Send + Sync + 'static>> = Box_::new(Box_::new(f));
-            connect(self.to_glib_none().0, "notify::target-property",
-                transmute(notify_target_property_trampoline as usize), Box_::into_raw(f) as *mut _)
         }
     }
 }
@@ -105,27 +58,8 @@ impl Binding {
 unsafe impl Send for Binding {}
 unsafe impl Sync for Binding {}
 
-unsafe extern "C" fn notify_flags_trampoline(this: *mut gobject_ffi::GBinding, _param_spec: glib_ffi::gpointer, f: glib_ffi::gpointer) {
-    let f: &&(Fn(&Binding) + Send + Sync + 'static) = transmute(f);
-    f(&from_glib_borrow(this))
-}
-
-unsafe extern "C" fn notify_source_trampoline(this: *mut gobject_ffi::GBinding, _param_spec: glib_ffi::gpointer, f: glib_ffi::gpointer) {
-    let f: &&(Fn(&Binding) + Send + Sync + 'static) = transmute(f);
-    f(&from_glib_borrow(this))
-}
-
-unsafe extern "C" fn notify_source_property_trampoline(this: *mut gobject_ffi::GBinding, _param_spec: glib_ffi::gpointer, f: glib_ffi::gpointer) {
-    let f: &&(Fn(&Binding) + Send + Sync + 'static) = transmute(f);
-    f(&from_glib_borrow(this))
-}
-
-unsafe extern "C" fn notify_target_trampoline(this: *mut gobject_ffi::GBinding, _param_spec: glib_ffi::gpointer, f: glib_ffi::gpointer) {
-    let f: &&(Fn(&Binding) + Send + Sync + 'static) = transmute(f);
-    f(&from_glib_borrow(this))
-}
-
-unsafe extern "C" fn notify_target_property_trampoline(this: *mut gobject_ffi::GBinding, _param_spec: glib_ffi::gpointer, f: glib_ffi::gpointer) {
-    let f: &&(Fn(&Binding) + Send + Sync + 'static) = transmute(f);
-    f(&from_glib_borrow(this))
+impl fmt::Display for Binding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Binding")
+    }
 }

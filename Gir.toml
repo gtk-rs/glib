@@ -2,10 +2,11 @@
 girs_dir = "gir-files"
 library = "GLib"
 version = "2.0"
-min_cfg_version = "2.32"
+min_cfg_version = "2.42"
 target_path = "."
 work_mode = "normal"
 single_version_file = true
+deprecate_by_min_version = true
 
 generate = [
     "GLib.DateDay",
@@ -15,6 +16,8 @@ generate = [
     "GLib.FormatSizeFlags",
     "GLib.KeyFileError",
     "GLib.KeyFileFlags",
+    "GLib.OptionArg",
+    "GLib.OptionFlags",
     "GLib.SeekType",
     "GLib.Time",
     "GLib.TimeType",
@@ -284,6 +287,50 @@ status = "generate"
     [[object.function]]
     name = "intern_string"
     ignore = true
+    [[object.function]]
+    # Pid conversion issue
+    name = "child_watch_add"
+    ignore = true
+    [[object.function]]
+    # Pid conversion issue
+    name = "child_watch_add_full"
+    ignore = true
+    [[object.function]]
+    name = "idle_add"
+    ignore = true
+    [[object.function]]
+    name = "idle_add_full"
+    ignore = true
+    [[object.function]]
+    name = "timeout_add"
+    ignore = true
+    [[object.function]]
+    name = "timeout_add_full"
+    ignore = true
+    [[object.function]]
+    name = "timeout_add_seconds"
+    ignore = true
+    [[object.function]]
+    name = "timeout_add_seconds_full"
+    ignore = true
+    [[object.function]]
+    name = "unix_signal_add"
+    ignore = true
+    [[object.function]]
+    name = "unix_signal_add_full"
+    ignore = true
+    [[object.function]]
+    pattern = "rc_box_.+"
+    #need manual implementation
+    ignore = true
+    [[object.function]]
+    pattern = "ref_count_.+"
+    #need manual implementation
+    ignore = true
+    [[object.function]]
+    pattern = "ref_string_.+"
+    #need manual implementation
+    ignore = true
     [[object.constant]]
     pattern = "DIR_SEPARATOR(_S)?"
     #not cross-platform
@@ -421,6 +468,12 @@ concurrency = "send+sync"
        name = "ref_thread_default"
            [object.function.return]
            nullable = false
+       [[object.function]]
+       name = "invoke"
+       ignore = true
+       [[object.function]]
+       name = "invoke_full"
+       ignore = true
 
 [[object]]
 name = "GLib.MainLoop"
@@ -439,6 +492,21 @@ concurrency = "send+sync"
         pattern = "set_.+"
         # Setters are generally not thread-safe
         # while GSource itself is
+        ignore = true
+
+        [[object.function]]
+        pattern = "attach"
+        # return type
+        ignore = true
+
+        [[object.function]]
+        pattern = "get_id"
+        # unsafe as it would allow multiple times to remove
+        ignore = true
+
+        [[object.function]]
+        pattern = "remove"
+        # parameter type
         ignore = true
 
 [[object]]

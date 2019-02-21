@@ -57,6 +57,10 @@
 //! `ObjectExt` and `gtk::WidgetExt`), which are blanketly implemented for all
 //! their subtypes.
 //!
+//! For creating new subclasses of `Object` or other object types this crate has to be compiled
+//! with the `subclassing` feature to enable the [`subclass`](subclass/index.html) module. Check
+//! the module's documentation for further details and a code example.
+//!
 //! # Under the hood
 //!
 //! GLib-based libraries largely operate on pointers to various boxed or
@@ -78,8 +82,11 @@ extern crate bitflags;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
-extern crate glib_sys as ffi;
-extern crate gobject_sys as gobject_ffi;
+
+#[doc(hidden)]
+pub extern crate glib_sys as ffi;
+#[doc(hidden)]
+pub extern crate gobject_sys as gobject_ffi;
 
 #[cfg(feature="futures")]
 pub extern crate futures;
@@ -93,8 +100,13 @@ pub use file_error::FileError;
 pub use object::{
     Cast,
     IsA,
+    IsClassFor,
     Object,
     ObjectExt,
+    ObjectClass,
+    ObjectType,
+    InitiallyUnowned,
+    InitiallyUnownedClass,
     WeakRef,
     SendWeakRef,
 };
@@ -116,8 +128,6 @@ pub use value::{
     TypedValue,
     SendValue,
     Value,
-    AnyValue,
-    AnySendValue,
 };
 pub use variant::{
     StaticVariantType,
@@ -148,6 +158,8 @@ pub mod boxed;
 #[macro_use]
 pub mod shared;
 #[macro_use]
+pub mod error;
+#[macro_use]
 pub mod object;
 
 pub use auto::*;
@@ -167,7 +179,6 @@ pub mod char;
 pub use char::*;
 mod checksum;
 pub mod closure;
-pub mod error;
 mod enums;
 mod file_error;
 mod key_file;
@@ -176,7 +187,10 @@ pub mod signal;
 pub mod source;
 pub use source::*;
 mod time_val;
+#[macro_use]
 pub mod translate;
+mod gstring;
+pub use gstring::GString;
 pub mod types;
 mod utils;
 pub use utils::*;
@@ -184,6 +198,8 @@ pub mod value;
 pub mod variant;
 mod variant_type;
 mod main_context;
+mod main_context_channel;
+pub use main_context_channel::{Sender, SyncSender, Receiver};
 mod date;
 pub use date::Date;
 mod value_array;
@@ -220,3 +236,7 @@ pub(crate) fn get_thread_id() -> usize {
     thread_local!(static THREAD_ID: usize = next_thread_id());
     THREAD_ID.with(|&x| x)
 }
+
+#[macro_use]
+#[cfg(any(feature = "dox", feature="subclassing"))]
+pub mod subclass;

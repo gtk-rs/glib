@@ -39,6 +39,10 @@
 //! ```
 
 use VariantTy;
+use StaticType;
+use Type;
+use Value;
+use value;
 use ffi as glib_ffi;
 use gobject_ffi;
 use translate::*;
@@ -48,8 +52,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
-use std::ptr;
-use std::mem;
+use gstring::GString;
 
 glib_wrapper! {
     /// A generic immutable value capable of carrying various types.
@@ -60,7 +63,33 @@ glib_wrapper! {
     match fn {
         ref => |ptr| glib_ffi::g_variant_ref_sink(ptr),
         unref => |ptr| glib_ffi::g_variant_unref(ptr),
-        get_type => || glib_ffi::g_variant_type_get_gtype(),
+    }
+}
+
+impl StaticType for Variant {
+    fn static_type() -> Type {
+        Type::Variant
+    }
+}
+
+#[doc(hidden)]
+impl<'a> value::FromValueOptional<'a> for Variant {
+    unsafe fn from_value_optional(value: &Value) -> Option<Self> {
+        from_glib_full(gobject_ffi::g_value_dup_variant(ToGlibPtr::to_glib_none(value).0))
+    }
+}
+
+#[doc(hidden)]
+impl value::SetValue for Variant {
+    unsafe fn set_value(value: &mut Value, this: &Self) {
+        gobject_ffi::g_value_set_variant(ToGlibPtrMut::to_glib_none_mut(value).0, ToGlibPtr::<*mut glib_ffi::GVariant>::to_glib_none(this).0)
+    }
+}
+
+#[doc(hidden)]
+impl value::SetValueOptional for Variant {
+    unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
+        gobject_ffi::g_value_set_variant(ToGlibPtrMut::to_glib_none_mut(value).0, ToGlibPtr::<*mut glib_ffi::GVariant>::to_glib_none(&this).0)
     }
 }
 
@@ -116,7 +145,7 @@ impl fmt::Debug for Variant {
 
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let serialized: String = unsafe {
+        let serialized: GString = unsafe {
             from_glib_full(glib_ffi::g_variant_print(self.to_glib_none().0, false.to_glib()))
         };
         f.write_str(&serialized)
@@ -285,14 +314,8 @@ impl StaticVariantType for str {
 }
 
 impl ToVariant for str {
-    #[cfg(any(feature = "v2_38"))]
     fn to_variant(&self) -> Variant {
         unsafe { from_glib_none(glib_ffi::g_variant_new_take_string(self.to_glib_full())) }
-    }
-
-    #[cfg(not(feature = "v2_38"))]
-    fn to_variant(&self) -> Variant {
-        unsafe { from_glib_none(glib_ffi::g_variant_new_string(self.to_glib_none().0)) }
     }
 }
 

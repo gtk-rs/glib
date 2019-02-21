@@ -2,12 +2,9 @@
 // from gir-files (https://github.com/gtk-rs/gir-files)
 // DO NOT EDIT
 
+use GString;
 use MainContext;
 use ffi;
-use ffi as glib_ffi;
-use gobject_ffi;
-use std::mem;
-use std::ptr;
 use translate::*;
 
 glib_wrapper! {
@@ -36,18 +33,9 @@ impl Source {
     //    unsafe { TODO: call ffi::g_source_add_poll() }
     //}
 
-    //#[cfg(any(feature = "v2_36", feature = "dox"))]
     //pub fn add_unix_fd(&self, fd: i32, events: IOCondition) -> /*Unimplemented*/Option<Fundamental: Pointer> {
     //    unsafe { TODO: call ffi::g_source_add_unix_fd() }
     //}
-
-    pub fn attach<'a, P: Into<Option<&'a MainContext>>>(&self, context: P) -> u32 {
-        let context = context.into();
-        let context = context.to_glib_none();
-        unsafe {
-            ffi::g_source_attach(self.to_glib_none().0, context.0)
-        }
-    }
 
     pub fn destroy(&self) {
         unsafe {
@@ -67,18 +55,7 @@ impl Source {
         }
     }
 
-    //#[deprecated]
-    //pub fn get_current_time(&self, timeval: /*Ignored*/&mut TimeVal) {
-    //    unsafe { TODO: call ffi::g_source_get_current_time() }
-    //}
-
-    pub fn get_id(&self) -> u32 {
-        unsafe {
-            ffi::g_source_get_id(self.to_glib_none().0)
-        }
-    }
-
-    pub fn get_name(&self) -> Option<String> {
+    pub fn get_name(&self) -> Option<GString> {
         unsafe {
             from_glib_none(ffi::g_source_get_name(self.to_glib_none().0))
         }
@@ -108,12 +85,10 @@ impl Source {
         }
     }
 
-    //#[cfg(any(feature = "v2_36", feature = "dox"))]
     //pub fn modify_unix_fd(&self, tag: /*Unimplemented*/Fundamental: Pointer, new_events: IOCondition) {
     //    unsafe { TODO: call ffi::g_source_modify_unix_fd() }
     //}
 
-    //#[cfg(any(feature = "v2_36", feature = "dox"))]
     //pub fn query_unix_fd(&self, tag: /*Unimplemented*/Fundamental: Pointer) -> IOCondition {
     //    unsafe { TODO: call ffi::g_source_query_unix_fd() }
     //}
@@ -128,22 +103,15 @@ impl Source {
     //    unsafe { TODO: call ffi::g_source_remove_poll() }
     //}
 
-    //#[cfg(any(feature = "v2_36", feature = "dox"))]
     //pub fn remove_unix_fd(&self, tag: /*Unimplemented*/Fundamental: Pointer) {
     //    unsafe { TODO: call ffi::g_source_remove_unix_fd() }
     //}
 
-    pub fn remove(tag: u32) -> bool {
-        unsafe {
-            from_glib(ffi::g_source_remove(tag))
-        }
-    }
-
-    //pub fn remove_by_funcs_user_data<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(funcs: /*Ignored*/&mut SourceFuncs, user_data: P) -> bool {
+    //pub fn remove_by_funcs_user_data(funcs: /*Ignored*/&mut SourceFuncs, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> bool {
     //    unsafe { TODO: call ffi::g_source_remove_by_funcs_user_data() }
     //}
 
-    //pub fn remove_by_user_data<P: Into<Option</*Unimplemented*/Fundamental: Pointer>>>(user_data: P) -> bool {
+    //pub fn remove_by_user_data(user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> bool {
     //    unsafe { TODO: call ffi::g_source_remove_by_user_data() }
     //}
 }

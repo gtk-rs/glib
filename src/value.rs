@@ -19,10 +19,6 @@
 //! Supported types are `bool`, `i8`, `u8`, `i32`, `u32`, `i64`, `u64`, `f32`,
 //! `f64`, `String` and objects (`T: IsA<Object>`).
 //!
-//! In addition any `'static` type implementing `Any` and `Clone` can be stored in a
-//! [`Value`](struct.Value.html) by using [`AnyValue`](struct.AnyValue.html) or
-//! [`AnySendValue`](struct.AnySendValue.html).
-//!
 //! # Examples
 //!
 //! ```
@@ -85,12 +81,11 @@ use std::mem;
 use std::ops::Deref;
 use std::ffi::CStr;
 use std::ptr;
-use std::any::Any;
-use std::sync::Arc;
 use libc::{c_char, c_void};
 
 use translate::*;
 use types::{StaticType, Type};
+use gstring::GString;
 
 use ffi as glib_ffi;
 use gobject_ffi;
@@ -108,7 +103,7 @@ use gobject_ffi;
 /// See the [module documentation](index.html) for more details.
 // TODO: Should use impl !Send for Value {} once stable
 #[repr(C)]
-pub struct Value(gobject_ffi::GValue, PhantomData<*const c_void>);
+pub struct Value(pub(crate) gobject_ffi::GValue, PhantomData<*const c_void>);
 
 impl Value {
     /// Creates a new `Value` that is initialized with `type_`
@@ -235,7 +230,7 @@ impl Drop for Value {
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         unsafe {
-            let s: String = from_glib_full(
+            let s: GString = from_glib_full(
                 gobject_ffi::g_strdup_value_contents(self.to_glib_none().0));
 
             f.debug_tuple("Value")
@@ -331,8 +326,8 @@ impl<'a> ToGlibContainerFromSlice<'a, *mut gobject_ffi::GValue> for &'a Value {
         unsafe {
             let res = glib_ffi::g_malloc(mem::size_of::<gobject_ffi::GValue>() * t.len()) as *mut gobject_ffi::GValue;
             for (i, v) in t.iter().enumerate() {
-                gobject_ffi::g_value_init(res.offset(i as isize), v.type_().to_glib());
-                gobject_ffi::g_value_copy(v.to_glib_none().0, res.offset(i as isize));
+                gobject_ffi::g_value_init(res.add(i), v.type_().to_glib());
+                gobject_ffi::g_value_copy(v.to_glib_none().0, res.add(i));
             }
             res
         }
@@ -389,7 +384,7 @@ macro_rules! from_glib {
 
                 let mut res = Vec::with_capacity(num);
                 for i in 0..num {
-                    res.push(from_glib_none(ptr::read(ptr.offset(i as isize))));
+                    res.push(from_glib_none(ptr::read(ptr.add(i))));
                 }
                 res
             }
@@ -407,7 +402,7 @@ macro_rules! from_glib {
 
                 let mut res = Vec::with_capacity(num);
                 for i in 0..num {
-                    res.push(from_glib_full(ptr::read(ptr.offset(i as isize))));
+                    res.push(from_glib_full(ptr::read(ptr.add(i))));
                 }
                 glib_ffi::g_free(ptr as *mut _);
                 res
@@ -836,6 +831,19 @@ impl<'a> FromValue<'a> for Vec<String> {
     }
 }
 
+impl<'a> FromValueOptional<'a> for Vec<GString> {
+    unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
+        Some(<Vec<GString> as FromValue>::from_value(value))
+    }
+}
+
+impl<'a> FromValue<'a> for Vec<GString> {
+    unsafe fn from_value(value: &'a Value) -> Self {
+        let ptr = gobject_ffi::g_value_get_boxed(value.to_glib_none().0) as *const *const c_char;
+        FromGlibPtrContainer::from_glib_none(ptr)
+    }
+}
+
 impl<'a> SetValue for [&'a str] {
     unsafe fn set_value(value: &mut Value, this: &Self) {
         let ptr: *mut *mut c_char = this.to_glib_full();
@@ -937,212 +945,6 @@ numeric!(u64, g_value_get_uint64, g_value_set_uint64);
 numeric!(f32, g_value_get_float, g_value_set_float);
 numeric!(f64, g_value_get_double, g_value_set_double);
 
-/// A container type that allows storing any `'static` type that implements `Any` and `Clone` to be
-/// stored in a [`Value`](struct.Value.html).
-///
-/// See the [module documentation](index.html) for more details.
-///
-/// # Examples
-///
-/// ```
-/// use glib::prelude::*; // or `use gtk::prelude::*;`
-/// use glib::{AnyValue, Value};
-///
-/// // Store a Rust string inside a Value
-/// let v = AnyValue::new(String::from("123")).to_value();
-///
-/// // Retrieve the Rust String from the the Value again
-/// let any_v = v.get::<&AnyValue>()
-///     .expect("Value did not actually contain an AnyValue");
-/// assert_eq!(any_v.downcast_ref::<String>(), Some(&String::from("123")));
-/// ```
-pub struct AnyValue {
-    val: Box<Any>,
-    copy_fn: Arc<Fn(&Any) -> Box<Any> + Send + Sync + 'static>,
-}
-
-impl AnyValue {
-    /// Create a new `AnyValue` from `val`
-    pub fn new<T: Any + Clone + 'static>(val: T) -> Self {
-        let val: Box<Any> = Box::new(val);
-        let copy_fn = Arc::new(|val: &Any| {
-            let copy = val.downcast_ref::<T>().expect("Can't cast Any to T").clone();
-            let copy_box: Box<Any> = Box::new(copy);
-            copy_box
-        });
-
-        Self { val, copy_fn }
-    }
-
-    /// Attempt the value to its concrete type.
-    pub fn downcast<T: Any + Clone + 'static>(self) -> Result<T, Self> {
-        let AnyValue { val, copy_fn } = self;
-        val.downcast().map(|val| *val).map_err(|val| AnyValue { val, copy_fn })
-    }
-
-    unsafe extern "C" fn copy(v: *mut c_void) -> *mut c_void {
-        let v = &*(v as *mut AnyValue);
-        Box::into_raw(Box::new(v.clone())) as *mut c_void
-    }
-
-    unsafe extern "C" fn free(v: *mut c_void) {
-        let _ = Box::from_raw(v as *mut AnyValue);
-    }
-}
-
-impl Clone for AnyValue {
-    fn clone(&self) -> Self {
-        let val = (*self.copy_fn)(self.val.as_ref());
-        Self {
-            val,
-            copy_fn: self.copy_fn.clone(),
-        }
-    }
-}
-
-impl fmt::Debug for AnyValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_tuple("AnyValue")
-            .finish()
-    }
-}
-
-impl Deref for AnyValue {
-    type Target = Any;
-
-    fn deref(&self) -> &Any {
-        &*self.val
-    }
-}
-
-impl<'a> FromValueOptional<'a> for &'a AnyValue {
-    unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
-        let v = gobject_ffi::g_value_get_boxed(value.to_glib_none().0);
-        if v.is_null() {
-            None
-        } else {
-            Some(&*(v as *const AnyValue))
-        }
-    }
-}
-
-impl SetValue for AnyValue {
-    unsafe fn set_value(value: &mut Value, this: &Self) {
-        let this_ptr = Box::into_raw(Box::new(this.clone())) as *const c_void;
-        gobject_ffi::g_value_take_boxed(value.to_glib_none_mut().0, this_ptr)
-    }
-}
-
-/// A container type that allows storing any `'static` type that implements `Any`, `Clone` and
-/// `Send` to be stored in a [`Value`](struct.Value.html) or [`SendValue`](struct.SendValue.html).
-///
-/// See the [module documentation](index.html) for more details and the
-/// [`AnyValue`](struct.AnyValue.html) for a code example.
-#[derive(Clone)]
-pub struct AnySendValue(AnyValue);
-
-unsafe impl Send for AnySendValue {}
-
-impl AnySendValue {
-    /// Create a new `AnySendValue` from `val`.
-    pub fn new<T: Any + Clone + Send + 'static>(val: T) -> Self {
-        AnySendValue(AnyValue::new(val))
-    }
-
-    /// Attempt the value to its concrete type.
-    pub fn downcast<T: Any + Clone + Send + 'static>(self) -> Result<T, Self> {
-        let AnySendValue(AnyValue { val, copy_fn }) = self;
-        val.downcast().map(|val| *val).map_err(|val| AnySendValue(AnyValue { val, copy_fn }))
-    }
-
-    unsafe extern "C" fn copy(v: *mut c_void) -> *mut c_void {
-        let v = &*(v as *mut AnySendValue);
-        Box::into_raw(Box::new(v.clone())) as *mut c_void
-    }
-
-    unsafe extern "C" fn free(v: *mut c_void) {
-        let _ = Box::from_raw(v as *mut AnySendValue);
-    }
-}
-
-impl fmt::Debug for AnySendValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_tuple("AnySendValue")
-            .finish()
-    }
-}
-
-impl Deref for AnySendValue {
-    type Target = AnyValue;
-
-    fn deref(&self) -> &AnyValue {
-        &self.0
-    }
-}
-
-macro_rules! any_value_get_type {
-    ($name:ident, $name_templ:expr) => {
-        impl StaticType for $name {
-            fn static_type() -> Type {
-                unsafe {
-                    use std::sync::{Once, ONCE_INIT};
-                    use std::ffi::CString;
-
-                    static mut TYPE: glib_ffi::GType = gobject_ffi::G_TYPE_INVALID;
-                    static ONCE: Once = ONCE_INIT;
-
-                    ONCE.call_once(|| {
-                        let type_name = {
-                            let mut idx = 0;
-
-                            // There might be multiple versions of glib-rs in this process
-                            loop {
-                                let type_name = CString::new(format!($name_templ, idx)).unwrap();
-                                if gobject_ffi::g_type_from_name(type_name.as_ptr())
-                                    == gobject_ffi::G_TYPE_INVALID
-                                {
-                                    break type_name;
-                                }
-                                idx += 1;
-                            }
-                        };
-
-                        TYPE = gobject_ffi::g_boxed_type_register_static(
-                            type_name.as_ptr(),
-                            Some(mem::transmute($name::copy as *const c_void)),
-                            Some(mem::transmute($name::free as *const c_void)),
-                        );
-
-                    });
-
-                    from_glib(TYPE)
-                }
-            }
-        }
-    }
-}
-
-impl<'a> FromValueOptional<'a> for &'a AnySendValue {
-    unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
-        let v = gobject_ffi::g_value_get_boxed(value.to_glib_none().0);
-        if v.is_null() {
-            None
-        } else {
-            Some(&*(v as *const AnySendValue))
-        }
-    }
-}
-
-impl SetValue for AnySendValue {
-    unsafe fn set_value(value: &mut Value, this: &Self) {
-        let this_ptr = Box::into_raw(Box::new(this.clone())) as *const c_void;
-        gobject_ffi::g_value_take_boxed(value.to_glib_none_mut().0, this_ptr)
-    }
-}
-
-any_value_get_type!(AnyValue, "AnyValueRs-{}");
-any_value_get_type!(AnySendValue, "AnySendValueRs-{}");
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1158,67 +960,11 @@ mod tests {
     }
 
     #[test]
-    fn test_any_value() {
-        let v = AnyValue::new(String::from("123"));
-        let v = v.to_value();
-
-        let any_v = v.get::<&AnyValue>().cloned();
-        assert!(any_v.is_some());
-        let any_v = any_v.unwrap();
-        let s = any_v.downcast_ref::<String>().map(|s| s.clone());
-        assert_eq!(s, Some(String::from("123")));
-
-        let v2 = v.clone();
-
-        let s = any_v.downcast::<String>().unwrap();
-        assert_eq!(s, String::from("123"));
-
-        drop(v);
-
-        let any_v = v2.get::<&AnyValue>().cloned();
-        assert!(any_v.is_some());
-        let any_v = any_v.unwrap();
-        let s = any_v.downcast_ref::<String>().map(|s| s.clone());
-        assert_eq!(s, Some(String::from("123")));
-    }
-
-    #[test]
-    fn test_any_send_value() {
-        let v = AnySendValue::new(String::from("123"));
-        let v = v.to_send_value();
-
-        let any_v = v.get::<&AnyValue>().cloned();
-        assert!(any_v.is_none());
-
-        let any_v = v.get::<&AnySendValue>().cloned();
-        assert!(any_v.is_some());
-        let any_v = any_v.unwrap();
-        let s = any_v.downcast_ref::<String>().map(|s| s.clone());
-        assert_eq!(s, Some(String::from("123")));
-
-        let v2 = v.clone();
-
-        let s = any_v.downcast::<String>().unwrap();
-        assert_eq!(s, String::from("123"));
-        drop(v);
-
-        let any_v = v2.get::<&AnySendValue>().cloned();
-        assert!(any_v.is_some());
-        let any_v = any_v.unwrap();
-        let s = any_v.downcast_ref::<String>().map(|s| s.clone());
-        assert_eq!(s, Some(String::from("123")));
-
-        // Must compile, while it must fail with AnyValue
-        use std::thread;
-        thread::spawn(move || drop(any_v)).join().unwrap();
-    }
-
-    #[test]
     fn test_strv() {
         let v = vec!["123", "456"].to_value();
-        assert_eq!(v.get::<Vec<String>>(), Some(vec!["123".into(), "456".into()]));
+        assert_eq!(v.get::<Vec<GString>>(), Some(vec![GString::from("123"), GString::from("456")]));
 
         let v = vec![String::from("123"), String::from("456")].to_value();
-        assert_eq!(v.get::<Vec<String>>(), Some(vec!["123".into(), "456".into()]));
+        assert_eq!(v.get::<Vec<GString>>(), Some(vec![GString::from("123"), GString::from("456")]));
     }
 }

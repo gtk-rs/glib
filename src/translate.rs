@@ -329,7 +329,7 @@ impl<'a> ToGlibPtr<'a, *const c_char> for str {
 
     #[inline]
     fn to_glib_none(&'a self) -> Stash<'a, *const c_char, Self> {
-        let tmp = CString::new(self).unwrap();
+        let tmp = CString::new(self).expect("str::ToGlibPtr<*const c_char>: unexpected '\0' character");
         Stash(tmp.as_ptr(), tmp)
     }
 
@@ -347,7 +347,7 @@ impl<'a> ToGlibPtr<'a, *mut c_char> for str {
 
     #[inline]
     fn to_glib_none(&'a self) -> Stash<'a, *mut c_char, Self> {
-        let tmp = CString::new(self).unwrap();
+        let tmp = CString::new(self).expect("str::ToGlibPtr<*mut c_char>: unexpected '\0' character");
         Stash(tmp.as_ptr() as *mut c_char, tmp)
     }
 
@@ -364,7 +364,7 @@ impl <'a> ToGlibPtr<'a, *const c_char> for String {
 
     #[inline]
     fn to_glib_none(&self) -> Stash<'a, *const c_char, String> {
-        let tmp = CString::new(&self[..]).unwrap();
+        let tmp = CString::new(&self[..]).expect("String::ToGlibPtr<*const c_char>: unexpected '\0' character");
         Stash(tmp.as_ptr(), tmp)
     }
 
@@ -382,7 +382,7 @@ impl <'a> ToGlibPtr<'a, *mut c_char> for String {
 
     #[inline]
     fn to_glib_none(&self) -> Stash<'a, *mut c_char, String> {
-        let tmp = CString::new(&self[..]).unwrap();
+        let tmp = CString::new(&self[..]).expect("String::ToGlibPtr<*mut c_char>: unexpected '\0' character");
         Stash(tmp.as_ptr() as *mut c_char, tmp)
     }
 
@@ -635,7 +635,7 @@ macro_rules! impl_to_glib_container_from_slice_string {
                     let v_ptr = glib_ffi::g_malloc0(mem::size_of::<$ffi_name>() * (t.len() + 1)) as *mut $ffi_name;
 
                     for (i, s) in v.iter().enumerate() {
-                        ptr::write(v_ptr.offset(i as isize), s.0);
+                        ptr::write(v_ptr.add(i), s.0);
                     }
 
                     v_ptr
@@ -649,10 +649,49 @@ macro_rules! impl_to_glib_container_from_slice_string {
                     let v_ptr = glib_ffi::g_malloc0(mem::size_of::<$ffi_name>() * (t.len() + 1)) as *mut $ffi_name;
 
                     for (i, s) in t.iter().enumerate() {
-                        ptr::write(v_ptr.offset(i as isize), s.to_glib_full());
+                        ptr::write(v_ptr.add(i), s.to_glib_full());
                     }
 
                     v_ptr
+                }
+            }
+        }
+        impl<'a> ToGlibContainerFromSlice<'a, *const $ffi_name> for $name {
+            type Storage = (Vec<Stash<'a, $ffi_name, $name>>, Option<Vec<$ffi_name>>);
+
+            fn to_glib_none_from_slice(t: &'a [$name]) -> (*const $ffi_name, Self::Storage) {
+                let v: Vec<_> = t.iter().map(|s| s.to_glib_none()).collect();
+                let mut v_ptr: Vec<_> = v.iter().map(|s| s.0).collect();
+                v_ptr.push(ptr::null_mut() as $ffi_name);
+
+                (v_ptr.as_ptr() as *const $ffi_name, (v, Some(v_ptr)))
+            }
+
+            fn to_glib_container_from_slice(t: &'a [$name]) -> (*const $ffi_name, Self::Storage) {
+                let v: Vec<_> = t.iter().map(|s| s.to_glib_none()).collect();
+
+                let v_ptr = unsafe {
+                    let v_ptr = glib_ffi::g_malloc0(mem::size_of::<$ffi_name>() * (t.len() + 1)) as *mut $ffi_name;
+
+                    for (i, s) in v.iter().enumerate() {
+                        ptr::write(v_ptr.add(i), s.0);
+                    }
+
+                    v_ptr as *const $ffi_name
+                };
+
+                (v_ptr, (v, None))
+            }
+
+            fn to_glib_full_from_slice(t: &[$name]) -> *const $ffi_name {
+                unsafe {
+                    let v_ptr = glib_ffi::g_malloc0(mem::size_of::<$ffi_name>() * (t.len() + 1)) as *mut $ffi_name;
+
+                    for (i, s) in t.iter().enumerate() {
+                        ptr::write(v_ptr.add(i), s.to_glib_full());
+                    }
+
+                    v_ptr as *const $ffi_name
                 }
             }
         }
@@ -1085,6 +1124,7 @@ impl FromGlibPtrNone<*const c_char> for String {
     }
 }
 
+// TODO: Deprecate this
 impl FromGlibPtrFull<*const c_char> for String {
     #[inline]
     unsafe fn from_glib_full(ptr: *const c_char) -> Self {
@@ -1094,6 +1134,7 @@ impl FromGlibPtrFull<*const c_char> for String {
     }
 }
 
+// TODO: Deprecate this
 impl FromGlibPtrNone<*mut c_char> for String {
     #[inline]
     unsafe fn from_glib_none(ptr: *mut c_char) -> Self {
@@ -1102,6 +1143,7 @@ impl FromGlibPtrNone<*mut c_char> for String {
     }
 }
 
+// TODO: Deprecate this
 impl FromGlibPtrFull<*mut c_char> for String {
     #[inline]
     unsafe fn from_glib_full(ptr: *mut c_char) -> Self {
@@ -1291,7 +1333,7 @@ impl FromGlibContainerAsVec<bool, *const glib_ffi::gboolean> for bool {
 
         let mut res = Vec::with_capacity(num);
         for i in 0..num {
-            res.push(from_glib(ptr::read(ptr.offset(i as isize))));
+            res.push(from_glib(ptr::read(ptr.add(i))));
         }
         res
     }
@@ -1333,7 +1375,7 @@ macro_rules! impl_from_glib_container_as_vec_fundamental {
 
                 let mut res = Vec::with_capacity(num);
                 for i in 0..num {
-                    res.push(ptr::read(ptr.offset(i as isize)));
+                    res.push(ptr::read(ptr.add(i)));
                 }
                 res
             }
@@ -1388,7 +1430,7 @@ macro_rules! impl_from_glib_container_as_vec_string {
 
                 let mut res = Vec::with_capacity(num);
                 for i in 0..num {
-                    res.push(from_glib_none(ptr::read(ptr.offset(i as isize)) as $ffi_name));
+                    res.push(from_glib_none(ptr::read(ptr.add(i)) as $ffi_name));
                 }
                 res
             }
@@ -1422,7 +1464,7 @@ macro_rules! impl_from_glib_container_as_vec_string {
 
                 let mut res = Vec::with_capacity(num);
                 for i in 0..num {
-                    res.push(from_glib_full(ptr::read(ptr.offset(i as isize))));
+                    res.push(from_glib_full(ptr::read(ptr.add(i))));
                 }
                 glib_ffi::g_free(ptr as *mut _);
                 res
@@ -1459,8 +1501,10 @@ macro_rules! impl_from_glib_container_as_vec_string {
     }
 }
 
+// TODO: Deprecate this
 impl_from_glib_container_as_vec_string!(String, *const c_char);
 impl_from_glib_container_as_vec_string!(String, *mut c_char);
+
 impl_from_glib_container_as_vec_string!(PathBuf, *const c_char);
 impl_from_glib_container_as_vec_string!(PathBuf, *mut c_char);
 impl_from_glib_container_as_vec_string!(OsString, *const c_char);
@@ -1731,13 +1775,14 @@ impl FromGlibPtrContainer<*const c_char, *mut glib_ffi::GHashTable> for HashMap<
 
 #[cfg(test)]
 mod tests {
-    extern crate tempdir;
-    use self::tempdir::TempDir;
+    extern crate tempfile;
+    use self::tempfile::tempdir;
     use std::fs;
 
     use std::collections::HashMap;
     use ffi as glib_ffi;
     use super::*;
+    use gstring::GString;
 
     #[test]
     fn string_hash_map() {
@@ -1764,9 +1809,20 @@ mod tests {
     }
 
     #[test]
+    fn gstring_array() {
+        let v = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let stash = v.to_glib_none();
+        let ptr: *mut *mut c_char = stash.0;
+        let ptr_copy = unsafe { glib_ffi::g_strdupv(ptr) };
+
+        let actual: Vec<GString> = unsafe { FromGlibPtrContainer::from_glib_full(ptr_copy) };
+        assert_eq!(v, actual);
+    }
+
+    #[test]
     #[cfg(not(target_os = "macos"))]
     fn test_paths() {
-        let tmp_dir = TempDir::new("glib-test").unwrap();
+        let tmp_dir = tempdir().unwrap();
 
         // Test if passing paths to GLib and getting them back
         // gives us useful results
@@ -1791,7 +1847,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_paths() {
-        let t_dir = TempDir::new("glib-test").unwrap();
+        let t_dir = tempdir().unwrap();
         let tmp_dir = t_dir.path().canonicalize().unwrap();
 
         // Test if passing paths to GLib and getting them back
