@@ -2,15 +2,14 @@
 // from gir-files (https://github.com/gtk-rs/gir-files)
 // DO NOT EDIT
 
+use GString;
 use TimeSpan;
 use TimeZone;
 use ffi;
 use ffi as glib_ffi;
-use gobject_ffi;
 use std::cmp;
 use std::hash;
 use std::mem;
-use std::ptr;
 use translate::*;
 
 glib_wrapper! {
@@ -32,11 +31,10 @@ impl DateTime {
     }
 
     #[cfg(any(feature = "v2_56", feature = "dox"))]
-    pub fn new_from_iso8601<'a, P: Into<Option<&'a TimeZone>>>(text: &str, default_tz: P) -> DateTime {
+    pub fn new_from_iso8601<'a, P: Into<Option<&'a TimeZone>>>(text: &str, default_tz: P) -> Option<DateTime> {
         let default_tz = default_tz.into();
-        let default_tz = default_tz.to_glib_none();
         unsafe {
-            from_glib_full(ffi::g_date_time_new_from_iso8601(text.to_glib_none().0, default_tz.0))
+            from_glib_full(ffi::g_date_time_new_from_iso8601(text.to_glib_none().0, default_tz.to_glib_none().0))
         }
     }
 
@@ -150,7 +148,7 @@ impl DateTime {
         }
     }
 
-    pub fn format(&self, format: &str) -> Option<String> {
+    pub fn format(&self, format: &str) -> Option<GString> {
         unsafe {
             from_glib_full(ffi::g_date_time_format(self.to_glib_none().0, format.to_glib_none().0))
         }
@@ -210,7 +208,14 @@ impl DateTime {
         }
     }
 
-    pub fn get_timezone_abbreviation(&self) -> Option<String> {
+    #[cfg(any(feature = "v2_58", feature = "dox"))]
+    pub fn get_timezone(&self) -> Option<TimeZone> {
+        unsafe {
+            from_glib_none(ffi::g_date_time_get_timezone(self.to_glib_none().0))
+        }
+    }
+
+    pub fn get_timezone_abbreviation(&self) -> Option<GString> {
         unsafe {
             from_glib_none(ffi::g_date_time_get_timezone_abbreviation(self.to_glib_none().0))
         }

@@ -2,12 +2,9 @@
 // from gir-files (https://github.com/gtk-rs/gir-files)
 // DO NOT EDIT
 
+use GString;
 use TimeType;
 use ffi;
-use ffi as glib_ffi;
-use gobject_ffi;
-use std::mem;
-use std::ptr;
 use translate::*;
 
 glib_wrapper! {
@@ -24,15 +21,21 @@ glib_wrapper! {
 impl TimeZone {
     pub fn new<'a, P: Into<Option<&'a str>>>(identifier: P) -> TimeZone {
         let identifier = identifier.into();
-        let identifier = identifier.to_glib_none();
         unsafe {
-            from_glib_full(ffi::g_time_zone_new(identifier.0))
+            from_glib_full(ffi::g_time_zone_new(identifier.to_glib_none().0))
         }
     }
 
     pub fn new_local() -> TimeZone {
         unsafe {
             from_glib_full(ffi::g_time_zone_new_local())
+        }
+    }
+
+    #[cfg(any(feature = "v2_58", feature = "dox"))]
+    pub fn new_offset(seconds: i32) -> TimeZone {
+        unsafe {
+            from_glib_full(ffi::g_time_zone_new_offset(seconds))
         }
     }
 
@@ -48,9 +51,16 @@ impl TimeZone {
         }
     }
 
-    pub fn get_abbreviation(&self, interval: i32) -> Option<String> {
+    pub fn get_abbreviation(&self, interval: i32) -> Option<GString> {
         unsafe {
             from_glib_none(ffi::g_time_zone_get_abbreviation(self.to_glib_none().0, interval))
+        }
+    }
+
+    #[cfg(any(feature = "v2_58", feature = "dox"))]
+    pub fn get_identifier(&self) -> Option<GString> {
+        unsafe {
+            from_glib_none(ffi::g_time_zone_get_identifier(self.to_glib_none().0))
         }
     }
 

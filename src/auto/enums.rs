@@ -5,6 +5,7 @@
 use Quark;
 use error::ErrorDomain;
 use ffi;
+use std::fmt;
 use translate::*;
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -13,12 +14,25 @@ pub enum ChecksumType {
     Md5,
     Sha1,
     Sha256,
-    #[cfg(any(feature = "v2_36", feature = "dox"))]
     Sha512,
     #[cfg(any(feature = "v2_52", feature = "dox"))]
     Sha384,
     #[doc(hidden)]
     __Unknown(i32),
+}
+
+impl fmt::Display for ChecksumType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ChecksumType::{}", match *self {
+            ChecksumType::Md5 => "Md5",
+            ChecksumType::Sha1 => "Sha1",
+            ChecksumType::Sha256 => "Sha256",
+            ChecksumType::Sha512 => "Sha512",
+            #[cfg(any(feature = "v2_52", feature = "dox"))]
+            ChecksumType::Sha384 => "Sha384",
+            _ => "Unknown",
+        })
+    }
 }
 
 #[doc(hidden)]
@@ -30,7 +44,6 @@ impl ToGlib for ChecksumType {
             ChecksumType::Md5 => ffi::G_CHECKSUM_MD5,
             ChecksumType::Sha1 => ffi::G_CHECKSUM_SHA1,
             ChecksumType::Sha256 => ffi::G_CHECKSUM_SHA256,
-            #[cfg(any(feature = "v2_36", feature = "dox"))]
             ChecksumType::Sha512 => ffi::G_CHECKSUM_SHA512,
             #[cfg(any(feature = "v2_52", feature = "dox"))]
             ChecksumType::Sha384 => ffi::G_CHECKSUM_SHA384,
@@ -46,7 +59,6 @@ impl FromGlib<ffi::GChecksumType> for ChecksumType {
             0 => ChecksumType::Md5,
             1 => ChecksumType::Sha1,
             2 => ChecksumType::Sha256,
-            #[cfg(any(feature = "v2_36", feature = "dox"))]
             3 => ChecksumType::Sha512,
             #[cfg(any(feature = "v2_52", feature = "dox"))]
             4 => ChecksumType::Sha384,
@@ -73,6 +85,27 @@ pub enum DateMonth {
     December,
     #[doc(hidden)]
     __Unknown(i32),
+}
+
+impl fmt::Display for DateMonth {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "DateMonth::{}", match *self {
+            DateMonth::BadMonth => "BadMonth",
+            DateMonth::January => "January",
+            DateMonth::February => "February",
+            DateMonth::March => "March",
+            DateMonth::April => "April",
+            DateMonth::May => "May",
+            DateMonth::June => "June",
+            DateMonth::July => "July",
+            DateMonth::August => "August",
+            DateMonth::September => "September",
+            DateMonth::October => "October",
+            DateMonth::November => "November",
+            DateMonth::December => "December",
+            _ => "Unknown",
+        })
+    }
 }
 
 #[doc(hidden)]
@@ -136,6 +169,22 @@ pub enum DateWeekday {
     __Unknown(i32),
 }
 
+impl fmt::Display for DateWeekday {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "DateWeekday::{}", match *self {
+            DateWeekday::BadWeekday => "BadWeekday",
+            DateWeekday::Monday => "Monday",
+            DateWeekday::Tuesday => "Tuesday",
+            DateWeekday::Wednesday => "Wednesday",
+            DateWeekday::Thursday => "Thursday",
+            DateWeekday::Friday => "Friday",
+            DateWeekday::Saturday => "Saturday",
+            DateWeekday::Sunday => "Sunday",
+            _ => "Unknown",
+        })
+    }
+}
+
 #[doc(hidden)]
 impl ToGlib for DateWeekday {
     type GlibType = ffi::GDateWeekday;
@@ -183,6 +232,20 @@ pub enum KeyFileError {
     InvalidValue,
     #[doc(hidden)]
     __Unknown(i32),
+}
+
+impl fmt::Display for KeyFileError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "KeyFileError::{}", match *self {
+            KeyFileError::UnknownEncoding => "UnknownEncoding",
+            KeyFileError::Parse => "Parse",
+            KeyFileError::NotFound => "NotFound",
+            KeyFileError::KeyNotFound => "KeyNotFound",
+            KeyFileError::GroupNotFound => "GroupNotFound",
+            KeyFileError::InvalidValue => "InvalidValue",
+            _ => "Unknown",
+        })
+    }
 }
 
 #[doc(hidden)]
@@ -241,12 +304,94 @@ impl ErrorDomain for KeyFileError {
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[derive(Clone, Copy)]
+pub enum OptionArg {
+    None,
+    String,
+    Int,
+    Callback,
+    Filename,
+    StringArray,
+    FilenameArray,
+    Double,
+    Int64,
+    #[doc(hidden)]
+    __Unknown(i32),
+}
+
+impl fmt::Display for OptionArg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "OptionArg::{}", match *self {
+            OptionArg::None => "None",
+            OptionArg::String => "String",
+            OptionArg::Int => "Int",
+            OptionArg::Callback => "Callback",
+            OptionArg::Filename => "Filename",
+            OptionArg::StringArray => "StringArray",
+            OptionArg::FilenameArray => "FilenameArray",
+            OptionArg::Double => "Double",
+            OptionArg::Int64 => "Int64",
+            _ => "Unknown",
+        })
+    }
+}
+
+#[doc(hidden)]
+impl ToGlib for OptionArg {
+    type GlibType = ffi::GOptionArg;
+
+    fn to_glib(&self) -> ffi::GOptionArg {
+        match *self {
+            OptionArg::None => ffi::G_OPTION_ARG_NONE,
+            OptionArg::String => ffi::G_OPTION_ARG_STRING,
+            OptionArg::Int => ffi::G_OPTION_ARG_INT,
+            OptionArg::Callback => ffi::G_OPTION_ARG_CALLBACK,
+            OptionArg::Filename => ffi::G_OPTION_ARG_FILENAME,
+            OptionArg::StringArray => ffi::G_OPTION_ARG_STRING_ARRAY,
+            OptionArg::FilenameArray => ffi::G_OPTION_ARG_FILENAME_ARRAY,
+            OptionArg::Double => ffi::G_OPTION_ARG_DOUBLE,
+            OptionArg::Int64 => ffi::G_OPTION_ARG_INT64,
+            OptionArg::__Unknown(value) => value
+        }
+    }
+}
+
+#[doc(hidden)]
+impl FromGlib<ffi::GOptionArg> for OptionArg {
+    fn from_glib(value: ffi::GOptionArg) -> Self {
+        match value {
+            0 => OptionArg::None,
+            1 => OptionArg::String,
+            2 => OptionArg::Int,
+            3 => OptionArg::Callback,
+            4 => OptionArg::Filename,
+            5 => OptionArg::StringArray,
+            6 => OptionArg::FilenameArray,
+            7 => OptionArg::Double,
+            8 => OptionArg::Int64,
+            value => OptionArg::__Unknown(value),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy)]
 pub enum SeekType {
     Cur,
     Set,
     End,
     #[doc(hidden)]
     __Unknown(i32),
+}
+
+impl fmt::Display for SeekType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SeekType::{}", match *self {
+            SeekType::Cur => "Cur",
+            SeekType::Set => "Set",
+            SeekType::End => "End",
+            _ => "Unknown",
+        })
+    }
 }
 
 #[doc(hidden)]
@@ -283,6 +428,17 @@ pub enum TimeType {
     Universal,
     #[doc(hidden)]
     __Unknown(i32),
+}
+
+impl fmt::Display for TimeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "TimeType::{}", match *self {
+            TimeType::Standard => "Standard",
+            TimeType::Daylight => "Daylight",
+            TimeType::Universal => "Universal",
+            _ => "Unknown",
+        })
+    }
 }
 
 #[doc(hidden)]

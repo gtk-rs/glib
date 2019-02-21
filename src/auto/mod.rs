@@ -28,6 +28,7 @@ pub use self::enums::ChecksumType;
 pub use self::enums::DateMonth;
 pub use self::enums::DateWeekday;
 pub use self::enums::KeyFileError;
+pub use self::enums::OptionArg;
 pub use self::enums::SeekType;
 pub use self::enums::TimeType;
 
@@ -36,6 +37,7 @@ pub use self::flags::FileTest;
 pub use self::flags::FormatSizeFlags;
 pub use self::flags::IOCondition;
 pub use self::flags::KeyFileFlags;
+pub use self::flags::OptionFlags;
 
 mod alias;
 pub use self::alias::DateDay;
@@ -51,11 +53,9 @@ pub use self::constants::CSET_DIGITS;
 pub use self::constants::CSET_a_2_z;
 pub use self::constants::KEY_FILE_DESKTOP_ACTION_GROUP_PREFIX;
 pub use self::constants::KEY_FILE_DESKTOP_GROUP;
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub use self::constants::KEY_FILE_DESKTOP_KEY_ACTIONS;
 pub use self::constants::KEY_FILE_DESKTOP_KEY_CATEGORIES;
 pub use self::constants::KEY_FILE_DESKTOP_KEY_COMMENT;
-#[cfg(any(feature = "v2_38", feature = "dox"))]
 pub use self::constants::KEY_FILE_DESKTOP_KEY_DBUS_ACTIVATABLE;
 pub use self::constants::KEY_FILE_DESKTOP_KEY_EXEC;
 pub use self::constants::KEY_FILE_DESKTOP_KEY_FULLNAME;
