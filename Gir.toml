@@ -36,6 +36,7 @@ manual = [
     "GLib.VariantType",
     "GLib.UserDirectory",
     "GObject.Object",
+    "GLib.RecMutex",
 ]
 
 [[object]]

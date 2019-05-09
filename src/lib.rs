@@ -209,6 +209,7 @@ mod param_spec;
 pub use param_spec::ParamSpec;
 mod quark;
 pub use quark::Quark;
+mod rec_mutex;
 
 pub mod send_unique;
 pub use send_unique::{
