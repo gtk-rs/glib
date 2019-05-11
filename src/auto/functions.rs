@@ -416,10 +416,6 @@ pub fn get_codeset() -> Option<GString> {
     }
 }
 
-//pub fn get_current_time(result: /*Ignored*/&mut TimeVal) {
-//    unsafe { TODO: call glib_sys:g_get_current_time() }
-//}
-
 pub fn get_environ() -> Vec<std::ffi::OsString> {
     unsafe {
         FromGlibPtrContainer::from_glib_full(glib_sys::g_get_environ())

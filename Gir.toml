@@ -32,6 +32,7 @@ ignore = [
 manual = [
     "GLib.Bytes",
     "GLib.Error",
+    "GLib.TimeVal",
     "GLib.Variant",
     "GLib.VariantType",
     "GLib.UserDirectory",
@@ -41,6 +42,10 @@ manual = [
 [[object]]
 name = "GLib.*"
 status = "generate"
+    [[object.function]]
+    name = "get_current_time"
+    #manual
+    ignore = true
     [[object.function]]
     name = "propagate_error"
     #empty first parameter

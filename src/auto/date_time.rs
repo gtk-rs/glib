@@ -4,6 +4,7 @@
 
 use GString;
 use TimeSpan;
+use TimeVal;
 use TimeZone;
 use glib_sys;
 use std::cmp;
@@ -36,13 +37,17 @@ impl DateTime {
         }
     }
 
-    //pub fn new_from_timeval_local(tv: /*Ignored*/&TimeVal) -> DateTime {
-    //    unsafe { TODO: call glib_sys:g_date_time_new_from_timeval_local() }
-    //}
+    pub fn new_from_timeval_local(tv: &TimeVal) -> DateTime {
+        unsafe {
+            from_glib_full(glib_sys::g_date_time_new_from_timeval_local(tv.to_glib_none().0))
+        }
+    }
 
-    //pub fn new_from_timeval_utc(tv: /*Ignored*/&TimeVal) -> DateTime {
-    //    unsafe { TODO: call glib_sys:g_date_time_new_from_timeval_utc() }
-    //}
+    pub fn new_from_timeval_utc(tv: &TimeVal) -> DateTime {
+        unsafe {
+            from_glib_full(glib_sys::g_date_time_new_from_timeval_utc(tv.to_glib_none().0))
+        }
+    }
 
     pub fn new_from_unix_local(t: i64) -> DateTime {
         unsafe {
@@ -265,9 +270,11 @@ impl DateTime {
         }
     }
 
-    //pub fn to_timeval(&self, tv: /*Ignored*/&mut TimeVal) -> bool {
-    //    unsafe { TODO: call glib_sys:g_date_time_to_timeval() }
-    //}
+    pub fn to_timeval(&self, tv: &mut TimeVal) -> bool {
+        unsafe {
+            from_glib(glib_sys::g_date_time_to_timeval(self.to_glib_none().0, tv.to_glib_none_mut().0))
+        }
+    }
 
     pub fn to_timezone(&self, tz: &TimeZone) -> Option<DateTime> {
         unsafe {
