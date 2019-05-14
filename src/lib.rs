@@ -211,6 +211,8 @@ mod value_array;
 pub use value_array::ValueArray;
 mod param_spec;
 pub use param_spec::ParamSpec;
+mod ptr_array;
+pub use ptr_array::PtrArray;
 mod quark;
 pub use quark::Quark;
 
