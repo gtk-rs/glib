@@ -93,6 +93,7 @@ pub extern crate gobject_sys;
 pub extern crate futures;
 
 use std::ffi::CStr;
+pub use array::Array;
 pub use byte_array::ByteArray;
 pub use bytes::Bytes;
 pub use string::String;
@@ -175,6 +176,7 @@ mod auto;
 pub use gobject::*;
 mod gobject;
 
+mod array;
 mod byte_array;
 mod bytes;
 mod string;
