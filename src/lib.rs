@@ -75,7 +75,8 @@
 //! conversions between high level Rust types (including the aforementioned
 //! wrappers) and their FFI counterparts.
 
-#![cfg_attr(feature = "cargo-clippy", allow(doc_markdown))]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::unreadable_literal)]
 
 #[macro_use]
 extern crate bitflags;
@@ -84,72 +85,35 @@ extern crate lazy_static;
 extern crate libc;
 
 #[doc(hidden)]
-pub extern crate glib_sys as ffi;
+pub extern crate glib_sys;
 #[doc(hidden)]
-pub extern crate gobject_sys as gobject_ffi;
+pub extern crate gobject_sys;
 
-#[cfg(feature="futures")]
+#[cfg(feature = "futures")]
 pub extern crate futures;
 
-use std::ffi::CStr;
+pub use byte_array::ByteArray;
 pub use bytes::Bytes;
-pub use string::String;
 pub use closure::Closure;
-pub use error::{Error, BoolError};
+pub use error::{BoolError, Error};
 pub use file_error::FileError;
 pub use object::{
-    Cast,
-    IsA,
-    IsClassFor,
-    Object,
-    ObjectExt,
-    ObjectClass,
-    ObjectType,
-    InitiallyUnowned,
-    InitiallyUnownedClass,
-    WeakRef,
-    SendWeakRef,
+    Cast, InitiallyUnowned, InitiallyUnownedClass, IsA, IsClassFor, Object, ObjectClass, ObjectExt,
+    ObjectType, SendWeakRef, WeakRef,
 };
 pub use signal::{
-    SignalHandlerId,
-    signal_handler_block,
-    signal_handler_disconnect,
-    signal_handler_unblock,
-    signal_stop_emission_by_name
+    signal_handler_block, signal_handler_disconnect, signal_handler_unblock,
+    signal_stop_emission_by_name, SignalHandlerId,
 };
+use std::ffi::CStr;
+pub use string::String;
 
-pub use types::{
-    StaticType,
-    Type,
-};
-pub use value::{
-    ToValue,
-    ToSendValue,
-    TypedValue,
-    SendValue,
-    Value,
-};
-pub use variant::{
-    StaticVariantType,
-    ToVariant,
-    Variant,
-};
-pub use variant_type::{
-    VariantTy,
-    VariantType,
-};
-pub use time_val::{
-    TimeVal,
-    get_current_time,
-};
-pub use enums::{
-    UserDirectory,
-    EnumClass,
-    EnumValue,
-    FlagsClass,
-    FlagsValue,
-    FlagsBuilder,
-};
+pub use enums::{EnumClass, EnumValue, FlagsBuilder, FlagsClass, FlagsValue, UserDirectory};
+pub use time_val::{get_current_time, TimeVal};
+pub use types::{StaticType, Type};
+pub use value::{SendValue, ToSendValue, ToValue, TypedValue, Value};
+pub use variant::{StaticVariantType, ToVariant, Variant};
+pub use variant_type::{VariantTy, VariantType};
 
 #[macro_use]
 pub mod wrapper;
@@ -162,20 +126,21 @@ pub mod error;
 #[macro_use]
 pub mod object;
 
-pub use auto::*;
 pub use auto::functions::*;
-#[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
-#[cfg_attr(feature = "cargo-clippy", allow(let_unit_value))]
-#[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+pub use auto::*;
+#[allow(clippy::let_and_return)]
+#[allow(clippy::let_unit_value)]
+#[allow(clippy::too_many_arguments)]
 #[allow(non_upper_case_globals)]
 mod auto;
 
 pub use gobject::*;
 mod gobject;
 
+mod byte_array;
 mod bytes;
-mod string;
 pub mod char;
+mod string;
 pub use char::*;
 mod checksum;
 pub mod closure;
@@ -194,12 +159,12 @@ pub use gstring::GString;
 pub mod types;
 mod utils;
 pub use utils::*;
+mod main_context;
+mod main_context_channel;
 pub mod value;
 pub mod variant;
 mod variant_type;
-mod main_context;
-mod main_context_channel;
-pub use main_context_channel::{Sender, SyncSender, Receiver};
+pub use main_context_channel::{Receiver, Sender, SyncSender};
 mod date;
 pub use date::Date;
 mod value_array;
@@ -210,25 +175,22 @@ mod quark;
 pub use quark::Quark;
 
 pub mod send_unique;
-pub use send_unique::{
-    SendUniqueCell,
-    SendUnique,
-};
+pub use send_unique::{SendUnique, SendUniqueCell};
 
-#[cfg(feature="futures")]
+#[cfg(feature = "futures")]
 mod main_context_futures;
-#[cfg(feature="futures")]
+#[cfg(feature = "futures")]
 mod source_futures;
-#[cfg(feature="futures")]
+#[cfg(feature = "futures")]
 pub use source_futures::*;
 
 // Actual thread IDs can be reused by the OS once the old thread finished.
 // This works around it by using our own counter for threads.
 //
 // Taken from the fragile crate
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::atomic::{AtomicUsize, Ordering};
 fn next_thread_id() -> usize {
-    static mut COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
+    static mut COUNTER: AtomicUsize = AtomicUsize::new(0);
     unsafe { COUNTER.fetch_add(1, Ordering::SeqCst) }
 }
 
@@ -238,5 +200,5 @@ pub(crate) fn get_thread_id() -> usize {
 }
 
 #[macro_use]
-#[cfg(any(feature = "dox", feature="subclassing"))]
+#[cfg(any(feature = "dox", feature = "subclassing"))]
 pub mod subclass;

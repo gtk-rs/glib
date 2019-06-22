@@ -2,27 +2,27 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
+use glib_sys::{self, gboolean, gpointer};
+#[cfg(all(not(unix), feature = "dox"))]
+use libc::c_int as RawFd;
 use std::cell::RefCell;
 use std::mem::transmute;
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
-#[cfg(all(not(unix), feature = "dox"))]
-use libc::c_int as RawFd;
 use std::process;
 use std::thread;
-use ffi as glib_ffi;
-use ffi::{gboolean, gpointer};
+use translate::{from_glib, from_glib_full, FromGlib, ToGlib, ToGlibPtr};
 #[cfg(any(unix, feature = "dox"))]
 use IOCondition;
-use translate::{from_glib, from_glib_full, FromGlib, ToGlib, ToGlibPtr};
 
-use Source;
 use MainContext;
+use Source;
 
 /// The id of a source that is returned by `idle_add` and `timeout_add`.
 #[derive(Debug, Eq, PartialEq)]
 pub struct SourceId(u32);
 
+#[doc(hidden)]
 impl ToGlib for SourceId {
     type GlibType = u32;
 
@@ -32,6 +32,7 @@ impl ToGlib for SourceId {
     }
 }
 
+#[doc(hidden)]
 impl FromGlib<u32> for SourceId {
     #[inline]
     fn from_glib(val: u32) -> SourceId {
@@ -42,7 +43,7 @@ impl FromGlib<u32> for SourceId {
 
 /// Process identificator
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct Pid(pub glib_ffi::GPid);
+pub struct Pid(pub glib_sys::GPid);
 
 unsafe impl Send for Pid {}
 unsafe impl Sync for Pid {}
@@ -57,6 +58,7 @@ unsafe impl Sync for Pid {}
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Continue(pub bool);
 
+#[doc(hidden)]
 impl ToGlib for Continue {
     type GlibType = gboolean;
 
@@ -68,7 +70,7 @@ impl ToGlib for Continue {
 
 /// Unwinding propagation guard. Aborts the process if destroyed while
 /// panicking.
-#[deprecated(note="Rustc has this functionality built-in since 1.26.0")]
+#[deprecated(note = "Rustc has this functionality built-in since 1.26.0")]
 pub struct CallbackGuard(());
 
 #[allow(deprecated)]
@@ -98,9 +100,8 @@ impl Drop for CallbackGuard {
     }
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
 unsafe extern "C" fn trampoline<F: FnMut() -> Continue + 'static>(func: gpointer) -> gboolean {
-    let func: &RefCell<F> = transmute(func);
+    let func: &RefCell<F> = &*(func as *const RefCell<F>);
     (&mut *func.borrow_mut())().to_glib()
 }
 
@@ -113,9 +114,12 @@ fn into_raw<F: FnMut() -> Continue + 'static>(func: F) -> gpointer {
     Box::into_raw(func) as gpointer
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
-unsafe extern "C" fn trampoline_child_watch<F: FnMut(Pid, i32) + 'static>(pid: glib_ffi::GPid, status: i32, func: gpointer) {
-    let func: &RefCell<F> = transmute(func);
+unsafe extern "C" fn trampoline_child_watch<F: FnMut(Pid, i32) + 'static>(
+    pid: glib_sys::GPid,
+    status: i32,
+    func: gpointer,
+) {
+    let func: &RefCell<F> = &*(func as *const RefCell<F>);
     (&mut *func.borrow_mut())(Pid(pid), status)
 }
 
@@ -123,21 +127,25 @@ unsafe extern "C" fn destroy_closure_child_watch<F: FnMut(Pid, i32) + 'static>(p
     Box::<RefCell<F>>::from_raw(ptr as *mut _);
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
 fn into_raw_child_watch<F: FnMut(Pid, i32) + 'static>(func: F) -> gpointer {
     let func: Box<RefCell<F>> = Box::new(RefCell::new(func));
     Box::into_raw(func) as gpointer
 }
 
 #[cfg(any(unix, feature = "dox"))]
-#[cfg_attr(feature = "cargo-clippy", allow(transmute_ptr_to_ref))]
-unsafe extern "C" fn trampoline_unix_fd<F: FnMut(RawFd, IOCondition) -> Continue + 'static>(fd: i32, condition: glib_ffi::GIOCondition, func: gpointer) -> gboolean {
-    let func: &RefCell<F> = transmute(func);
+unsafe extern "C" fn trampoline_unix_fd<F: FnMut(RawFd, IOCondition) -> Continue + 'static>(
+    fd: i32,
+    condition: glib_sys::GIOCondition,
+    func: gpointer,
+) -> gboolean {
+    let func: &RefCell<F> = &*(func as *const RefCell<F>);
     (&mut *func.borrow_mut())(fd, from_glib(condition)).to_glib()
 }
 
 #[cfg(any(unix, feature = "dox"))]
-unsafe extern "C" fn destroy_closure_unix_fd<F: FnMut(RawFd, IOCondition) -> Continue + 'static>(ptr: gpointer) {
+unsafe extern "C" fn destroy_closure_unix_fd<F: FnMut(RawFd, IOCondition) -> Continue + 'static>(
+    ptr: gpointer,
+) {
     Box::<RefCell<F>>::from_raw(ptr as *mut _);
 }
 
@@ -154,10 +162,16 @@ fn into_raw_unix_fd<F: FnMut(RawFd, IOCondition) -> Continue + 'static>(func: F)
 /// The default main loop almost always is the main loop of the main thread.
 /// Thus the closure is called on the main thread.
 pub fn idle_add<F>(func: F) -> SourceId
-where F: FnMut() -> Continue + Send + 'static {
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        from_glib(glib_ffi::g_idle_add_full(glib_ffi::G_PRIORITY_DEFAULT_IDLE, Some(trampoline::<F>),
-            into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_idle_add_full(
+            glib_sys::G_PRIORITY_DEFAULT_IDLE,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -174,11 +188,17 @@ where F: FnMut() -> Continue + Send + 'static {
 /// This function panics if called from a different thread than the one that
 /// owns the main context.
 pub fn idle_add_local<F>(func: F) -> SourceId
-where F: FnMut() -> Continue + 'static {
+where
+    F: FnMut() -> Continue + 'static,
+{
     unsafe {
         assert!(MainContext::default().is_owner());
-        from_glib(glib_ffi::g_idle_add_full(glib_ffi::G_PRIORITY_DEFAULT_IDLE, Some(trampoline::<F>),
-            into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_idle_add_full(
+            glib_sys::G_PRIORITY_DEFAULT_IDLE,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -193,10 +213,17 @@ where F: FnMut() -> Continue + 'static {
 /// The default main loop almost always is the main loop of the main thread.
 /// Thus the closure is called on the main thread.
 pub fn timeout_add<F>(interval: u32, func: F) -> SourceId
-where F: FnMut() -> Continue + Send + 'static {
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        from_glib(glib_ffi::g_timeout_add_full(glib_ffi::G_PRIORITY_DEFAULT, interval,
-            Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_timeout_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            interval,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -217,11 +244,18 @@ where F: FnMut() -> Continue + Send + 'static {
 /// This function panics if called from a different thread than the one that
 /// owns the main context.
 pub fn timeout_add_local<F>(interval: u32, func: F) -> SourceId
-where F: FnMut() -> Continue + 'static {
+where
+    F: FnMut() -> Continue + 'static,
+{
     unsafe {
         assert!(MainContext::default().is_owner());
-        from_glib(glib_ffi::g_timeout_add_full(glib_ffi::G_PRIORITY_DEFAULT, interval,
-            Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_timeout_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            interval,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -235,10 +269,17 @@ where F: FnMut() -> Continue + 'static {
 /// The default main loop almost always is the main loop of the main thread.
 /// Thus the closure is called on the main thread.
 pub fn timeout_add_seconds<F>(interval: u32, func: F) -> SourceId
-where F: FnMut() -> Continue + Send + 'static {
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        from_glib(glib_ffi::g_timeout_add_seconds_full(glib_ffi::G_PRIORITY_DEFAULT, interval,
-            Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_timeout_add_seconds_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            interval,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -258,11 +299,18 @@ where F: FnMut() -> Continue + Send + 'static {
 /// This function panics if called from a different thread than the one that
 /// owns the main context.
 pub fn timeout_add_seconds_local<F>(interval: u32, func: F) -> SourceId
-where F: FnMut() -> Continue + 'static {
+where
+    F: FnMut() -> Continue + 'static,
+{
     unsafe {
         assert!(MainContext::default().is_owner());
-        from_glib(glib_ffi::g_timeout_add_seconds_full(glib_ffi::G_PRIORITY_DEFAULT, interval,
-            Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_timeout_add_seconds_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            interval,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -270,11 +318,18 @@ where F: FnMut() -> Continue + 'static {
 /// process exits.
 ///
 /// `func` will be called when `pid` exits
-pub fn child_watch_add<'a, N: Into<Option<&'a str>>, F>(pid: Pid, func: F) -> SourceId
-where F: FnMut(Pid, i32) + Send + 'static {
+pub fn child_watch_add<F>(pid: Pid, func: F) -> SourceId
+where
+    F: FnMut(Pid, i32) + Send + 'static,
+{
     unsafe {
-        from_glib(glib_ffi::g_child_watch_add_full(glib_ffi::G_PRIORITY_DEFAULT, pid.0,
-            Some(transmute(trampoline_child_watch::<F> as usize)), into_raw_child_watch(func), Some(destroy_closure_child_watch::<F>)))
+        from_glib(glib_sys::g_child_watch_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            pid.0,
+            Some(transmute(trampoline_child_watch::<F> as usize)),
+            into_raw_child_watch(func),
+            Some(destroy_closure_child_watch::<F>),
+        ))
     }
 }
 
@@ -288,12 +343,19 @@ where F: FnMut(Pid, i32) + Send + 'static {
 ///
 /// This function panics if called from a different thread than the one that
 /// owns the main context.
-pub fn child_watch_add_local<'a, N: Into<Option<&'a str>>, F>(pid: Pid, func: F) -> SourceId
-where F: FnMut(Pid, i32) + 'static {
+pub fn child_watch_add_local<F>(pid: Pid, func: F) -> SourceId
+where
+    F: FnMut(Pid, i32) + 'static,
+{
     unsafe {
         assert!(MainContext::default().is_owner());
-        from_glib(glib_ffi::g_child_watch_add_full(glib_ffi::G_PRIORITY_DEFAULT, pid.0,
-            Some(transmute(trampoline_child_watch::<F> as usize)), into_raw_child_watch(func), Some(destroy_closure_child_watch::<F>)))
+        from_glib(glib_sys::g_child_watch_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            pid.0,
+            Some(transmute(trampoline_child_watch::<F> as usize)),
+            into_raw_child_watch(func),
+            Some(destroy_closure_child_watch::<F>),
+        ))
     }
 }
 
@@ -306,10 +368,17 @@ where F: FnMut(Pid, i32) + 'static {
 /// The default main loop almost always is the main loop of the main thread.
 /// Thus the closure is called on the main thread.
 pub fn unix_signal_add<F>(signum: i32, func: F) -> SourceId
-where F: FnMut() -> Continue + Send + 'static {
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        from_glib(glib_ffi::g_unix_signal_add_full(glib_ffi::G_PRIORITY_DEFAULT, signum,
-            Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_unix_signal_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            signum,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -328,11 +397,18 @@ where F: FnMut() -> Continue + Send + 'static {
 /// This function panics if called from a different thread than the one that
 /// owns the main context.
 pub fn unix_signal_add_local<F>(signum: i32, func: F) -> SourceId
-where F: FnMut() -> Continue + 'static {
+where
+    F: FnMut() -> Continue + 'static,
+{
     unsafe {
         assert!(MainContext::default().is_owner());
-        from_glib(glib_ffi::g_unix_signal_add_full(glib_ffi::G_PRIORITY_DEFAULT, signum,
-            Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>)))
+        from_glib(glib_sys::g_unix_signal_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            signum,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        ))
     }
 }
 
@@ -346,10 +422,18 @@ where F: FnMut() -> Continue + 'static {
 /// The default main loop almost always is the main loop of the main thread.
 /// Thus the closure is called on the main thread.
 pub fn unix_fd_add<F>(fd: RawFd, condition: IOCondition, func: F) -> SourceId
-where F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static {
+where
+    F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static,
+{
     unsafe {
-        from_glib(glib_ffi::g_unix_fd_add_full(glib_ffi::G_PRIORITY_DEFAULT, fd, condition.to_glib(),
-            Some(transmute(trampoline_unix_fd::<F> as usize)), into_raw_unix_fd(func), Some(destroy_closure_unix_fd::<F>)))
+        from_glib(glib_sys::g_unix_fd_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            fd,
+            condition.to_glib(),
+            Some(transmute(trampoline_unix_fd::<F> as usize)),
+            into_raw_unix_fd(func),
+            Some(destroy_closure_unix_fd::<F>),
+        ))
     }
 }
 
@@ -369,11 +453,19 @@ where F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static {
 /// This function panics if called from a different thread than the one that
 /// owns the main context.
 pub fn unix_fd_add_local<F>(fd: RawFd, condition: IOCondition, func: F) -> SourceId
-where F: FnMut(RawFd, IOCondition) -> Continue + 'static {
+where
+    F: FnMut(RawFd, IOCondition) -> Continue + 'static,
+{
     unsafe {
         assert!(MainContext::default().is_owner());
-        from_glib(glib_ffi::g_unix_fd_add_full(glib_ffi::G_PRIORITY_DEFAULT, fd, condition.to_glib(),
-            Some(transmute(trampoline_unix_fd::<F> as usize)), into_raw_unix_fd(func), Some(destroy_closure_unix_fd::<F>)))
+        from_glib(glib_sys::g_unix_fd_add_full(
+            glib_sys::G_PRIORITY_DEFAULT,
+            fd,
+            condition.to_glib(),
+            Some(transmute(trampoline_unix_fd::<F> as usize)),
+            into_raw_unix_fd(func),
+            Some(destroy_closure_unix_fd::<F>),
+        ))
     }
 }
 
@@ -384,10 +476,10 @@ where F: FnMut(RawFd, IOCondition) -> Continue + 'static {
 ///
 /// For historical reasons, the native function always returns true, so we
 /// ignore it here.
-#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
+#[allow(clippy::needless_pass_by_value)]
 pub fn source_remove(source_id: SourceId) {
     unsafe {
-        glib_ffi::g_source_remove(source_id.to_glib());
+        glib_sys::g_source_remove(source_id.to_glib());
     }
 }
 
@@ -396,6 +488,7 @@ pub fn source_remove(source_id: SourceId) {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Priority(i32);
 
+#[doc(hidden)]
 impl ToGlib for Priority {
     type GlibType = i32;
 
@@ -405,6 +498,7 @@ impl ToGlib for Priority {
     }
 }
 
+#[doc(hidden)]
 impl FromGlib<i32> for Priority {
     #[inline]
     fn from_glib(val: i32) -> Priority {
@@ -418,25 +512,31 @@ impl Default for Priority {
     }
 }
 
-pub const PRIORITY_HIGH: Priority = Priority(glib_ffi::G_PRIORITY_HIGH);
-pub const PRIORITY_DEFAULT: Priority = Priority(glib_ffi::G_PRIORITY_DEFAULT);
-pub const PRIORITY_HIGH_IDLE: Priority = Priority(glib_ffi::G_PRIORITY_HIGH_IDLE);
-pub const PRIORITY_DEFAULT_IDLE: Priority = Priority(glib_ffi::G_PRIORITY_DEFAULT_IDLE);
-pub const PRIORITY_LOW: Priority = Priority(glib_ffi::G_PRIORITY_LOW);
+pub const PRIORITY_HIGH: Priority = Priority(glib_sys::G_PRIORITY_HIGH);
+pub const PRIORITY_DEFAULT: Priority = Priority(glib_sys::G_PRIORITY_DEFAULT);
+pub const PRIORITY_HIGH_IDLE: Priority = Priority(glib_sys::G_PRIORITY_HIGH_IDLE);
+pub const PRIORITY_DEFAULT_IDLE: Priority = Priority(glib_sys::G_PRIORITY_DEFAULT_IDLE);
+pub const PRIORITY_LOW: Priority = Priority(glib_sys::G_PRIORITY_LOW);
 
 /// Adds a closure to be called by the main loop the return `Source` is attached to when it's idle.
 ///
 /// `func` will be called repeatedly until it returns `Continue(false)`.
-pub fn idle_source_new<'a, N: Into<Option<&'a str>>, F>(name: N, priority: Priority, func: F) -> Source
-where F: FnMut() -> Continue + Send + 'static {
+pub fn idle_source_new<F>(name: Option<&str>, priority: Priority, func: F) -> Source
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        let source = glib_ffi::g_idle_source_new();
-        glib_ffi::g_source_set_callback(source, Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>));
-        glib_ffi::g_source_set_priority(source, priority.to_glib());
+        let source = glib_sys::g_idle_source_new();
+        glib_sys::g_source_set_callback(
+            source,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        );
+        glib_sys::g_source_set_priority(source, priority.to_glib());
 
-        let name = name.into();
         if let Some(name) = name {
-            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+            glib_sys::g_source_set_name(source, name.to_glib_none().0);
         }
 
         from_glib_full(source)
@@ -450,16 +550,27 @@ where F: FnMut() -> Continue + Send + 'static {
 /// returns `Continue(false)`. Precise timing is not guaranteed, the timeout may
 /// be delayed by other events. Prefer `timeout_add_seconds` when millisecond
 /// precision is not necessary.
-pub fn timeout_source_new<'a, N: Into<Option<&'a str>>, F>(interval: u32, name: N, priority: Priority, func: F) -> Source
-where F: FnMut() -> Continue + Send + 'static {
+pub fn timeout_source_new<F>(
+    interval: u32,
+    name: Option<&str>,
+    priority: Priority,
+    func: F,
+) -> Source
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        let source = glib_ffi::g_timeout_source_new(interval);
-        glib_ffi::g_source_set_callback(source, Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>));
-        glib_ffi::g_source_set_priority(source, priority.to_glib());
+        let source = glib_sys::g_timeout_source_new(interval);
+        glib_sys::g_source_set_callback(
+            source,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        );
+        glib_sys::g_source_set_priority(source, priority.to_glib());
 
-        let name = name.into();
         if let Some(name) = name {
-            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+            glib_sys::g_source_set_name(source, name.to_glib_none().0);
         }
 
         from_glib_full(source)
@@ -472,16 +583,27 @@ where F: FnMut() -> Continue + Send + 'static {
 /// `func` will be called repeatedly every `interval` seconds until it
 /// returns `Continue(false)`. Precise timing is not guaranteed, the timeout may
 /// be delayed by other events.
-pub fn timeout_source_new_seconds<'a, N: Into<Option<&'a str>>, F>(interval: u32, name: N, priority: Priority, func: F) -> Source
-where F: FnMut() -> Continue + Send + 'static {
+pub fn timeout_source_new_seconds<F>(
+    interval: u32,
+    name: Option<&str>,
+    priority: Priority,
+    func: F,
+) -> Source
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        let source = glib_ffi::g_timeout_source_new_seconds(interval);
-        glib_ffi::g_source_set_callback(source, Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>));
-        glib_ffi::g_source_set_priority(source, priority.to_glib());
+        let source = glib_sys::g_timeout_source_new_seconds(interval);
+        glib_sys::g_source_set_callback(
+            source,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        );
+        glib_sys::g_source_set_priority(source, priority.to_glib());
 
-        let name = name.into();
         if let Some(name) = name {
-            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+            glib_sys::g_source_set_name(source, name.to_glib_none().0);
         }
 
         from_glib_full(source)
@@ -492,16 +614,27 @@ where F: FnMut() -> Continue + Send + 'static {
 /// process exits.
 ///
 /// `func` will be called when `pid` exits
-pub fn child_watch_source_new<'a, N: Into<Option<&'a str>>, F>(pid: Pid, name: N, priority: Priority, func: F) -> Source
-where F: FnMut(Pid, i32) + Send + 'static {
+pub fn child_watch_source_new<F>(
+    pid: Pid,
+    name: Option<&str>,
+    priority: Priority,
+    func: F,
+) -> Source
+where
+    F: FnMut(Pid, i32) + Send + 'static,
+{
     unsafe {
-        let source = glib_ffi::g_child_watch_source_new(pid.0);
-        glib_ffi::g_source_set_callback(source, Some(transmute(trampoline_child_watch::<F> as usize)), into_raw_child_watch(func), Some(destroy_closure_child_watch::<F>));
-        glib_ffi::g_source_set_priority(source, priority.to_glib());
+        let source = glib_sys::g_child_watch_source_new(pid.0);
+        glib_sys::g_source_set_callback(
+            source,
+            Some(transmute(trampoline_child_watch::<F> as usize)),
+            into_raw_child_watch(func),
+            Some(destroy_closure_child_watch::<F>),
+        );
+        glib_sys::g_source_set_priority(source, priority.to_glib());
 
-        let name = name.into();
         if let Some(name) = name {
-            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+            glib_sys::g_source_set_name(source, name.to_glib_none().0);
         }
 
         from_glib_full(source)
@@ -514,16 +647,27 @@ where F: FnMut(Pid, i32) + Send + 'static {
 ///
 /// `func` will be called repeatedly every time `signum` is raised until it
 /// returns `Continue(false)`.
-pub fn unix_signal_source_new<'a, N: Into<Option<&'a str>>, F>(signum: i32, name: N, priority: Priority, func: F) -> Source
-where F: FnMut() -> Continue + Send + 'static {
+pub fn unix_signal_source_new<F>(
+    signum: i32,
+    name: Option<&str>,
+    priority: Priority,
+    func: F,
+) -> Source
+where
+    F: FnMut() -> Continue + Send + 'static,
+{
     unsafe {
-        let source = glib_ffi::g_unix_signal_source_new(signum);
-        glib_ffi::g_source_set_callback(source, Some(trampoline::<F>), into_raw(func), Some(destroy_closure::<F>));
-        glib_ffi::g_source_set_priority(source, priority.to_glib());
+        let source = glib_sys::g_unix_signal_source_new(signum);
+        glib_sys::g_source_set_callback(
+            source,
+            Some(trampoline::<F>),
+            into_raw(func),
+            Some(destroy_closure::<F>),
+        );
+        glib_sys::g_source_set_priority(source, priority.to_glib());
 
-        let name = name.into();
         if let Some(name) = name {
-            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+            glib_sys::g_source_set_name(source, name.to_glib_none().0);
         }
 
         from_glib_full(source)
@@ -536,16 +680,28 @@ where F: FnMut() -> Continue + Send + 'static {
 ///
 /// `func` will be called repeatedly while the file descriptor matches the given IO condition
 /// until it returns `Continue(false)`.
-pub fn unix_fd_source_new<'a, N: Into<Option<&'a str>>, F>(fd: RawFd, condition: IOCondition, name: N, priority: Priority, func: F) -> Source
-where F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static {
+pub fn unix_fd_source_new<F>(
+    fd: RawFd,
+    condition: IOCondition,
+    name: Option<&str>,
+    priority: Priority,
+    func: F,
+) -> Source
+where
+    F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static,
+{
     unsafe {
-        let source = glib_ffi::g_unix_fd_source_new(fd, condition.to_glib());
-        glib_ffi::g_source_set_callback(source, Some(transmute(trampoline_unix_fd::<F> as usize)), into_raw_unix_fd(func), Some(destroy_closure_unix_fd::<F>));
-        glib_ffi::g_source_set_priority(source, priority.to_glib());
+        let source = glib_sys::g_unix_fd_source_new(fd, condition.to_glib());
+        glib_sys::g_source_set_callback(
+            source,
+            Some(transmute(trampoline_unix_fd::<F> as usize)),
+            into_raw_unix_fd(func),
+            Some(destroy_closure_unix_fd::<F>),
+        );
+        glib_sys::g_source_set_priority(source, priority.to_glib());
 
-        let name = name.into();
         if let Some(name) = name {
-            glib_ffi::g_source_set_name(source, name.to_glib_none().0);
+            glib_sys::g_source_set_name(source, name.to_glib_none().0);
         }
 
         from_glib_full(source)
@@ -553,16 +709,21 @@ where F: FnMut(RawFd, IOCondition) -> Continue + Send + 'static {
 }
 
 impl Source {
-    pub fn attach<'a, P: Into<Option<&'a MainContext>>>(&self, context: P) -> SourceId {
-        let context = context.into();
+    pub fn attach(&self, context: Option<&MainContext>) -> SourceId {
         unsafe {
-            from_glib(ffi::g_source_attach(self.to_glib_none().0, context.to_glib_none().0))
+            from_glib(glib_sys::g_source_attach(
+                self.to_glib_none().0,
+                context.to_glib_none().0,
+            ))
         }
     }
 
     pub fn remove(tag: SourceId) -> Result<(), ::BoolError> {
         unsafe {
-            glib_result_from_gboolean!(ffi::g_source_remove(tag.to_glib()), "Failed to remove source")
+            glib_result_from_gboolean!(
+                glib_sys::g_source_remove(tag.to_glib()),
+                "Failed to remove source"
+            )
         }
     }
 }

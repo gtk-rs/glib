@@ -4,6 +4,10 @@ GIR_FILES = gir-files/Glib-2.0.gir gir-files/GObject-2.0.gir
 
 # Run `gir` generating the bindings
 gir : src/auto/mod.rs src/gobject/auto/mod.rs
+	cargo fmt
+
+doc: $(GIR) $(GIR_FILES)
+	$(GIR) -m doc -c Gir.toml
 
 not_bound: $(GIR) $(GIR_FILES)
 	$(GIR) -m not_bound -c Gir.toml
@@ -13,6 +17,7 @@ regen_check: $(GIR) $(GIR_FILES)
 	rm src/gobject/auto/*
 	$(GIR) -c Gir.toml
 	$(GIR) -c Gir_GObject.toml
+	cargo fmt
 	git diff -R --exit-code
 
 src/auto/mod.rs : Gir.toml $(GIR) $(GIR_FILES)
