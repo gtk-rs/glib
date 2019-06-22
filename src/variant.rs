@@ -38,31 +38,31 @@
 //! assert_eq!(num.get_str(), None);
 //! ```
 
-use VariantTy;
-use StaticType;
-use Type;
-use Value;
-use value;
-use ffi as glib_ffi;
-use gobject_ffi;
-use translate::*;
+use glib_sys;
+use gobject_sys;
+use gstring::GString;
 use std::borrow::Cow;
-use std::cmp::{PartialEq, Eq, PartialOrd, Ordering};
+use std::cmp::{Eq, Ordering, PartialEq, PartialOrd};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
-use gstring::GString;
+use translate::*;
+use value;
+use StaticType;
+use Type;
+use Value;
+use VariantTy;
 
 glib_wrapper! {
     /// A generic immutable value capable of carrying various types.
     ///
     /// See the [module documentation](index.html) for more details.
-    pub struct Variant(Shared<glib_ffi::GVariant>);
+    pub struct Variant(Shared<glib_sys::GVariant>);
 
     match fn {
-        ref => |ptr| glib_ffi::g_variant_ref_sink(ptr),
-        unref => |ptr| glib_ffi::g_variant_unref(ptr),
+        ref => |ptr| glib_sys::g_variant_ref_sink(ptr),
+        unref => |ptr| glib_sys::g_variant_unref(ptr),
     }
 }
 
@@ -75,28 +75,36 @@ impl StaticType for Variant {
 #[doc(hidden)]
 impl<'a> value::FromValueOptional<'a> for Variant {
     unsafe fn from_value_optional(value: &Value) -> Option<Self> {
-        from_glib_full(gobject_ffi::g_value_dup_variant(ToGlibPtr::to_glib_none(value).0))
+        from_glib_full(gobject_sys::g_value_dup_variant(
+            ToGlibPtr::to_glib_none(value).0,
+        ))
     }
 }
 
 #[doc(hidden)]
 impl value::SetValue for Variant {
     unsafe fn set_value(value: &mut Value, this: &Self) {
-        gobject_ffi::g_value_set_variant(ToGlibPtrMut::to_glib_none_mut(value).0, ToGlibPtr::<*mut glib_ffi::GVariant>::to_glib_none(this).0)
+        gobject_sys::g_value_set_variant(
+            ToGlibPtrMut::to_glib_none_mut(value).0,
+            ToGlibPtr::<*mut glib_sys::GVariant>::to_glib_none(this).0,
+        )
     }
 }
 
 #[doc(hidden)]
 impl value::SetValueOptional for Variant {
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
-        gobject_ffi::g_value_set_variant(ToGlibPtrMut::to_glib_none_mut(value).0, ToGlibPtr::<*mut glib_ffi::GVariant>::to_glib_none(&this).0)
+        gobject_sys::g_value_set_variant(
+            ToGlibPtrMut::to_glib_none_mut(value).0,
+            ToGlibPtr::<*mut glib_sys::GVariant>::to_glib_none(&this).0,
+        )
     }
 }
 
 impl Variant {
     /// Returns the type of the value.
     pub fn type_(&self) -> &VariantTy {
-        unsafe { VariantTy::from_ptr(glib_ffi::g_variant_get_type(self.to_glib_none().0)) }
+        unsafe { VariantTy::from_ptr(glib_sys::g_variant_get_type(self.to_glib_none().0)) }
     }
 
     /// Returns `true` if the type of the value corresponds to `T`.
@@ -122,9 +130,11 @@ impl Variant {
             match self.type_().to_str() {
                 "s" | "o" | "g" => {
                     let mut len = 0;
-                    let ptr = glib_ffi::g_variant_get_string(self.to_glib_none().0, &mut len);
-                    let ret = str::from_utf8_unchecked(
-                        slice::from_raw_parts(ptr as *const u8, len as usize));
+                    let ptr = glib_sys::g_variant_get_string(self.to_glib_none().0, &mut len);
+                    let ret = str::from_utf8_unchecked(slice::from_raw_parts(
+                        ptr as *const u8,
+                        len as usize,
+                    ));
                     Some(ret)
                 }
                 _ => None,
@@ -133,20 +143,26 @@ impl Variant {
     }
 }
 
-unsafe impl Send for Variant { }
-unsafe impl Sync for Variant { }
+unsafe impl Send for Variant {}
+unsafe impl Sync for Variant {}
 
 impl fmt::Debug for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("Variant {{ ptr: {:?}, type: \"{}\", value: {} }}",
-            self.to_glib_none().0, self.type_(), self))
+        f.debug_struct("Variant")
+            .field("ptr", &self.to_glib_none().0)
+            .field("type", &self.type_())
+            .field("value", &self.to_string())
+            .finish()
     }
 }
 
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let serialized: GString = unsafe {
-            from_glib_full(glib_ffi::g_variant_print(self.to_glib_none().0, false.to_glib()))
+            from_glib_full(glib_sys::g_variant_print(
+                self.to_glib_none().0,
+                false.to_glib(),
+            ))
         };
         f.write_str(&serialized)
     }
@@ -155,28 +171,33 @@ impl fmt::Display for Variant {
 impl PartialEq for Variant {
     fn eq(&self, other: &Self) -> bool {
         unsafe {
-            from_glib(
-                glib_ffi::g_variant_equal(self.to_glib_none().0 as *const _,
-                    other.to_glib_none().0 as *const _))
+            from_glib(glib_sys::g_variant_equal(
+                self.to_glib_none().0 as *const _,
+                other.to_glib_none().0 as *const _,
+            ))
         }
     }
 }
 
-impl Eq for Variant { }
+impl Eq for Variant {}
 
 impl PartialOrd for Variant {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         unsafe {
-            if glib_ffi::g_variant_classify(self.to_glib_none().0) !=
-               glib_ffi::g_variant_classify(other.to_glib_none().0) {
+            if glib_sys::g_variant_classify(self.to_glib_none().0)
+                != glib_sys::g_variant_classify(other.to_glib_none().0)
+            {
                 return None;
             }
 
-            if glib_ffi::g_variant_is_container(self.to_glib_none().0) != glib_ffi::GFALSE {
+            if glib_sys::g_variant_is_container(self.to_glib_none().0) != glib_sys::GFALSE {
                 return None;
             }
 
-            let res = glib_ffi::g_variant_compare(self.to_glib_none().0 as *const _, other.to_glib_none().0 as *const _);
+            let res = glib_sys::g_variant_compare(
+                self.to_glib_none().0 as *const _,
+                other.to_glib_none().0 as *const _,
+            );
             if res < 0 {
                 Some(Ordering::Less)
             } else if res > 0 {
@@ -190,9 +211,7 @@ impl PartialOrd for Variant {
 
 impl Hash for Variant {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        unsafe {
-            state.write_u32(glib_ffi::g_variant_hash(self.to_glib_none().0 as *const _))
-        }
+        unsafe { state.write_u32(glib_sys::g_variant_hash(self.to_glib_none().0 as *const _)) }
     }
 }
 
@@ -238,7 +257,7 @@ macro_rules! impl_numeric {
 
         impl ToVariant for $name {
             fn to_variant(&self) -> Variant {
-                unsafe { from_glib_none(glib_ffi::$new_fn(*self)) }
+                unsafe { from_glib_none(glib_sys::$new_fn(*self)) }
             }
         }
 
@@ -246,14 +265,14 @@ macro_rules! impl_numeric {
             fn from_variant(variant: &Variant) -> Option<Self> {
                 unsafe {
                     if variant.is::<Self>() {
-                        Some(glib_ffi::$get_fn(variant.to_glib_none().0))
+                        Some(glib_sys::$get_fn(variant.to_glib_none().0))
                     } else {
                         None
                     }
                 }
             }
         }
-    }
+    };
 }
 
 impl_numeric!(u8, "y", g_variant_new_byte, g_variant_get_byte);
@@ -273,7 +292,7 @@ impl StaticVariantType for bool {
 
 impl ToVariant for bool {
     fn to_variant(&self) -> Variant {
-        unsafe { from_glib_none(glib_ffi::g_variant_new_boolean(self.to_glib())) }
+        unsafe { from_glib_none(glib_sys::g_variant_new_boolean(self.to_glib())) }
     }
 }
 
@@ -281,7 +300,9 @@ impl FromVariant for bool {
     fn from_variant(variant: &Variant) -> Option<Self> {
         unsafe {
             if variant.is::<Self>() {
-                Some(from_glib(glib_ffi::g_variant_get_boolean(variant.to_glib_none().0)))
+                Some(from_glib(glib_sys::g_variant_get_boolean(
+                    variant.to_glib_none().0,
+                )))
             } else {
                 None
             }
@@ -315,7 +336,7 @@ impl StaticVariantType for str {
 
 impl ToVariant for str {
     fn to_variant(&self) -> Variant {
-        unsafe { from_glib_none(glib_ffi::g_variant_new_take_string(self.to_glib_full())) }
+        unsafe { from_glib_none(glib_sys::g_variant_new_take_string(self.to_glib_full())) }
     }
 }
 
@@ -327,21 +348,21 @@ impl<T: ToVariant> From<T> for Variant {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use super::*;
+    use std::collections::HashSet;
 
     macro_rules! unsigned {
         ($name:ident, $ty:ident) => {
             #[test]
             fn $name() {
                 let mut n = $ty::max_value();
-                while n > 0  {
+                while n > 0 {
                     let v = Variant::from(n);
                     assert_eq!(v.get(), Some(n));
                     n /= 2;
                 }
             }
-        }
+        };
     }
 
     macro_rules! signed {
@@ -349,7 +370,7 @@ mod tests {
             #[test]
             fn $name() {
                 let mut n = $ty::max_value();
-                while n > 0  {
+                while n > 0 {
                     let v = Variant::from(n);
                     assert_eq!(v.get(), Some(n));
                     let v = Variant::from(-n);
@@ -357,7 +378,7 @@ mod tests {
                     n /= 2;
                 }
             }
-        }
+        };
     }
 
     unsigned!(test_u8, u8);

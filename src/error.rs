@@ -4,24 +4,24 @@
 
 //! `Error` binding and helper trait.
 
-use std::ffi::CStr;
-use Quark;
+use glib_sys;
 use std::borrow::Cow;
 use std::error;
+use std::ffi::CStr;
 use std::fmt;
 use std::str;
 use translate::*;
-use ffi as glib_ffi;
+use Quark;
 
 glib_wrapper! {
     /// A generic error capable of representing various error domains (types).
     #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Error(Boxed<glib_ffi::GError>);
+    pub struct Error(Boxed<glib_sys::GError>);
 
     match fn {
-        copy => |ptr| glib_ffi::g_error_copy(ptr),
-        free => |ptr| glib_ffi::g_error_free(ptr),
-        get_type => || glib_ffi::g_error_get_type(),
+        copy => |ptr| glib_sys::g_error_copy(ptr),
+        free => |ptr| glib_sys::g_error_free(ptr),
+        get_type => || glib_sys::g_error_get_type(),
     }
 }
 
@@ -32,8 +32,11 @@ impl Error {
     /// Creates an error with supplied error enum variant and message.
     pub fn new<T: ErrorDomain>(error: T, message: &str) -> Error {
         unsafe {
-            from_glib_full(
-                glib_ffi::g_error_new_literal(T::domain().to_glib(), error.code(), message.to_glib_none().0))
+            from_glib_full(glib_sys::g_error_new_literal(
+                T::domain().to_glib(),
+                error.code(),
+                message.to_glib_none().0,
+            ))
         }
     }
 
@@ -69,8 +72,7 @@ impl Error {
     pub fn kind<T: ErrorDomain>(&self) -> Option<T> {
         if self.0.domain == T::domain().to_glib() {
             T::from(self.0.code)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -78,16 +80,9 @@ impl Error {
     fn message(&self) -> &str {
         unsafe {
             let bytes = CStr::from_ptr(self.0.message).to_bytes();
-            str::from_utf8(bytes).unwrap_or_else(|err| {
-                str::from_utf8(&bytes[..err.valid_up_to()]).unwrap()
-            })
+            str::from_utf8(bytes)
+                .unwrap_or_else(|err| str::from_utf8(&bytes[..err.valid_up_to()]).unwrap())
         }
-    }
-
-    // backcompat shim
-    #[cfg_attr(feature = "cargo-clippy", allow(not_unsafe_ptr_arg_deref))]
-    pub fn wrap(ptr: *mut glib_ffi::GError) -> Error {
-        unsafe { from_glib_full(ptr) }
     }
 }
 
@@ -129,7 +124,9 @@ pub trait ErrorDomain: Copy {
     ///
     /// By convention, the `Failed` variant, if present, is a catch-all,
     /// i.e. any unrecognized codes map to it.
-    fn from(code: i32) -> Option<Self> where Self: Sized;
+    fn from(code: i32) -> Option<Self>
+    where
+        Self: Sized;
 }
 
 /// Generic error used for functions that fail without any further information
@@ -192,19 +189,14 @@ impl BoolError {
     }
 
     pub fn from_glib<Msg: Into<Cow<'static, str>>>(
-        b: glib_ffi::gboolean,
+        b: glib_sys::gboolean,
         message: Msg,
         filename: &'static str,
         function: &'static str,
         line: u32,
     ) -> Result<(), Self> {
         match b {
-            glib_ffi::GFALSE => Err(BoolError::new(
-                message,
-                filename,
-                function,
-                line,
-            )),
+            glib_sys::GFALSE => Err(BoolError::new(message, filename, function, line)),
             _ => Ok(()),
         }
     }
@@ -240,28 +232,21 @@ mod tests {
         let from_dynamic_msg = glib_bool_error!("{} message", "Dynamic");
         assert_eq!(from_dynamic_msg.description(), "Dynamic message");
 
-        let false_static_res = glib_result_from_gboolean!(glib_ffi::GFALSE, "Static message");
+        let false_static_res = glib_result_from_gboolean!(glib_sys::GFALSE, "Static message");
         assert!(false_static_res.is_err());
         let static_err = false_static_res.err().unwrap();
         assert_eq!(static_err.description(), "Static message");
 
-        let true_static_res = glib_result_from_gboolean!(glib_ffi::GTRUE, "Static message");
+        let true_static_res = glib_result_from_gboolean!(glib_sys::GTRUE, "Static message");
         assert!(true_static_res.is_ok());
 
-        let false_dynamic_res = glib_result_from_gboolean!(
-            glib_ffi::GFALSE,
-            "{} message",
-            "Dynamic"
-        );
+        let false_dynamic_res =
+            glib_result_from_gboolean!(glib_sys::GFALSE, "{} message", "Dynamic");
         assert!(false_dynamic_res.is_err());
         let dynamic_err = false_dynamic_res.err().unwrap();
         assert_eq!(dynamic_err.description(), "Dynamic message");
 
-        let true_dynamic_res = glib_result_from_gboolean!(
-            glib_ffi::GTRUE,
-            "{} message",
-            "Dynamic"
-        );
+        let true_dynamic_res = glib_result_from_gboolean!(glib_sys::GTRUE, "{} message", "Dynamic");
         assert!(true_dynamic_res.is_ok());
-   }
+    }
 }

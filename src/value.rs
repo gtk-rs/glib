@@ -74,21 +74,20 @@
 //! assert_eq!(typed_num.get_some(), 20);
 //! ```
 
+use libc::{c_char, c_void};
 use std::borrow::Borrow;
+use std::ffi::CStr;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
-use std::ffi::CStr;
 use std::ptr;
-use libc::{c_char, c_void};
 
+use glib_sys;
+use gobject_sys;
+use gstring::GString;
 use translate::*;
 use types::{StaticType, Type};
-use gstring::GString;
-
-use ffi as glib_ffi;
-use gobject_ffi;
 
 /// A generic value capable of carrying various types.
 ///
@@ -103,15 +102,18 @@ use gobject_ffi;
 /// See the [module documentation](index.html) for more details.
 // TODO: Should use impl !Send for Value {} once stable
 #[repr(C)]
-pub struct Value(pub(crate) gobject_ffi::GValue, PhantomData<*const c_void>);
+pub struct Value(pub(crate) gobject_sys::GValue, PhantomData<*const c_void>);
 
 impl Value {
     /// Creates a new `Value` that is initialized with `type_`
     pub fn from_type(type_: Type) -> Self {
         unsafe {
-            assert_eq!(gobject_ffi::g_type_check_is_value_type(type_.to_glib()), glib_ffi::GTRUE);
+            assert_eq!(
+                gobject_sys::g_type_check_is_value_type(type_.to_glib()),
+                glib_sys::GTRUE
+            );
             let mut value = Value::uninitialized();
-            gobject_ffi::g_value_init(value.to_glib_none_mut().0, type_.to_glib());
+            gobject_sys::g_value_init(value.to_glib_none_mut().0, type_.to_glib());
             value
         }
     }
@@ -122,13 +124,13 @@ impl Value {
     /// to `T` and `Err(self)` otherwise.
     pub fn downcast<'a, T: FromValueOptional<'a> + SetValue>(self) -> Result<TypedValue<T>, Self> {
         unsafe {
-            let ok = from_glib(
-                gobject_ffi::g_type_check_value_holds(mut_override(self.to_glib_none().0),
-                    T::static_type().to_glib()));
+            let ok = from_glib(gobject_sys::g_type_check_value_holds(
+                mut_override(self.to_glib_none().0),
+                T::static_type().to_glib(),
+            ));
             if ok {
                 Ok(TypedValue(self, PhantomData))
-            }
-            else {
+            } else {
                 Err(self)
             }
         }
@@ -140,15 +142,15 @@ impl Value {
     /// to `T` and `None` otherwise.
     pub fn downcast_ref<'a, T: FromValueOptional<'a> + SetValue>(&self) -> Option<&TypedValue<T>> {
         unsafe {
-            let ok = from_glib(
-                gobject_ffi::g_type_check_value_holds(mut_override(self.to_glib_none().0),
-                    T::static_type().to_glib()));
+            let ok = from_glib(gobject_sys::g_type_check_value_holds(
+                mut_override(self.to_glib_none().0),
+                T::static_type().to_glib(),
+            ));
             if ok {
                 // This transmute is safe because Value and TypedValue have the same
                 // representation: the only difference is the zero-sized phantom data
-                Some(mem::transmute(self))
-            }
-            else {
+                Some(&*(self as *const Value as *const TypedValue<T>))
+            } else {
                 None
             }
         }
@@ -162,15 +164,15 @@ impl Value {
     /// typed `None` values. Use `downcast` or `is` for that.
     pub fn get<'a, T: FromValueOptional<'a>>(&'a self) -> Option<T> {
         unsafe {
-           let ok = from_glib(
-               gobject_ffi::g_type_check_value_holds(mut_override(self.to_glib_none().0),
-                   T::static_type().to_glib()));
-           if ok {
-               T::from_value_optional(self)
-           }
-           else {
-               None
-           }
+            let ok = from_glib(gobject_sys::g_type_check_value_holds(
+                mut_override(self.to_glib_none().0),
+                T::static_type().to_glib(),
+            ));
+            if ok {
+                T::from_value_optional(self)
+            } else {
+                None
+            }
         }
     }
 
@@ -189,12 +191,15 @@ impl Value {
     /// Returns whether `Value`s of type `src` can be transformed to type `dst`.
     pub fn type_transformable(src: Type, dst: Type) -> bool {
         unsafe {
-            from_glib(gobject_ffi::g_value_type_transformable(src.to_glib(), dst.to_glib()))
+            from_glib(gobject_sys::g_value_type_transformable(
+                src.to_glib(),
+                dst.to_glib(),
+            ))
         }
     }
 
     #[doc(hidden)]
-    pub fn into_raw(mut self) -> gobject_ffi::GValue {
+    pub fn into_raw(mut self) -> gobject_sys::GValue {
         unsafe {
             let ret = mem::replace(&mut self.0, mem::uninitialized());
             mem::forget(self);
@@ -202,7 +207,9 @@ impl Value {
         }
     }
 
-    pub fn try_into_send_value<'a, T: Send + FromValueOptional<'a> + SetValue>(self) -> Result<SendValue, Self> {
+    pub fn try_into_send_value<'a, T: Send + FromValueOptional<'a> + SetValue>(
+        self,
+    ) -> Result<SendValue, Self> {
         self.downcast::<T>().map(TypedValue::into_send_value)
     }
 }
@@ -211,7 +218,7 @@ impl Clone for Value {
     fn clone(&self) -> Self {
         unsafe {
             let mut ret = Value::from_type(from_glib(self.0.g_type));
-            gobject_ffi::g_value_copy(self.to_glib_none().0, ret.to_glib_none_mut().0);
+            gobject_sys::g_value_copy(self.to_glib_none().0, ret.to_glib_none_mut().0);
             ret
         }
     }
@@ -222,7 +229,7 @@ impl Drop for Value {
         // Before GLib 2.48, unsetting a zeroed GValue would give critical warnings
         // https://bugzilla.gnome.org/show_bug.cgi?id=755766
         if self.type_() != Type::Invalid {
-            unsafe { gobject_ffi::g_value_unset(self.to_glib_none_mut().0) }
+            unsafe { gobject_sys::g_value_unset(self.to_glib_none_mut().0) }
         }
     }
 }
@@ -230,12 +237,10 @@ impl Drop for Value {
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         unsafe {
-            let s: GString = from_glib_full(
-                gobject_ffi::g_strdup_value_contents(self.to_glib_none().0));
+            let s: GString =
+                from_glib_full(gobject_sys::g_strdup_value_contents(self.to_glib_none().0));
 
-            f.debug_tuple("Value")
-                .field(&s)
-                .finish()
+            f.debug_tuple("Value").field(&s).finish()
         }
     }
 }
@@ -272,112 +277,130 @@ impl Uninitialized for Value {
     }
 }
 
-impl<'a> ToGlibPtr<'a, *const gobject_ffi::GValue> for Value {
+#[doc(hidden)]
+impl<'a> ToGlibPtr<'a, *const gobject_sys::GValue> for Value {
     type Storage = &'a Value;
 
-    fn to_glib_none(&'a self) -> Stash<'a, *const gobject_ffi::GValue, Self> {
+    fn to_glib_none(&'a self) -> Stash<'a, *const gobject_sys::GValue, Self> {
         Stash(&self.0, self)
     }
 }
 
-impl<'a> ToGlibPtrMut<'a, *mut gobject_ffi::GValue> for Value {
+#[doc(hidden)]
+impl<'a> ToGlibPtrMut<'a, *mut gobject_sys::GValue> for Value {
     type Storage = &'a mut Value;
 
-    fn to_glib_none_mut(&'a mut self) -> StashMut<'a, *mut gobject_ffi::GValue, Self> {
+    fn to_glib_none_mut(&'a mut self) -> StashMut<'a, *mut gobject_sys::GValue, Self> {
         StashMut(&mut self.0, self)
     }
 }
 
-impl<'a> ToGlibPtr<'a, *mut gobject_ffi::GValue> for &'a [&'a ToValue] {
+#[doc(hidden)]
+impl<'a> ToGlibPtr<'a, *mut gobject_sys::GValue> for &'a [&'a dyn ToValue] {
     type Storage = ValueArray;
 
-    fn to_glib_none(&'a self) -> Stash<'a, *mut gobject_ffi::GValue, Self> {
-        let mut values: Vec<gobject_ffi::GValue> = self.iter()
-            .map(|v| v.to_value().into_raw())
-            .collect();
+    fn to_glib_none(&'a self) -> Stash<'a, *mut gobject_sys::GValue, Self> {
+        let mut values: Vec<gobject_sys::GValue> =
+            self.iter().map(|v| v.to_value().into_raw()).collect();
         Stash(values.as_mut_ptr(), ValueArray(values))
     }
 }
 
-impl<'a> ToGlibContainerFromSlice<'a, *mut gobject_ffi::GValue> for &'a Value {
+#[doc(hidden)]
+impl<'a> ToGlibContainerFromSlice<'a, *mut gobject_sys::GValue> for &'a Value {
     type Storage = &'a [&'a Value];
 
-    fn to_glib_none_from_slice(t: &'a [&'a Value]) -> (*mut gobject_ffi::GValue, &'a [&'a Value]) {
-        (t.as_ptr() as *mut gobject_ffi::GValue, t)
+    fn to_glib_none_from_slice(t: &'a [&'a Value]) -> (*mut gobject_sys::GValue, &'a [&'a Value]) {
+        (t.as_ptr() as *mut gobject_sys::GValue, t)
     }
 
-    fn to_glib_container_from_slice(t: &'a [&'a Value]) -> (*mut gobject_ffi::GValue, &'a [&'a Value]) {
+    fn to_glib_container_from_slice(
+        t: &'a [&'a Value],
+    ) -> (*mut gobject_sys::GValue, &'a [&'a Value]) {
         if t.is_empty() {
             return (ptr::null_mut(), t);
         }
 
         unsafe {
-            let res = glib_ffi::g_malloc(mem::size_of::<gobject_ffi::GValue>() * t.len()) as *mut gobject_ffi::GValue;
-            ptr::copy_nonoverlapping(t.as_ptr() as *const gobject_ffi::GValue, res, t.len());
+            let res = glib_sys::g_malloc(mem::size_of::<gobject_sys::GValue>() * t.len())
+                as *mut gobject_sys::GValue;
+            ptr::copy_nonoverlapping(t.as_ptr() as *const gobject_sys::GValue, res, t.len());
             (res, t)
         }
     }
 
-    fn to_glib_full_from_slice(t: &[&'a Value]) -> *mut gobject_ffi::GValue {
+    fn to_glib_full_from_slice(t: &[&'a Value]) -> *mut gobject_sys::GValue {
         if t.is_empty() {
             return ptr::null_mut();
         }
 
         unsafe {
-            let res = glib_ffi::g_malloc(mem::size_of::<gobject_ffi::GValue>() * t.len()) as *mut gobject_ffi::GValue;
+            let res = glib_sys::g_malloc(mem::size_of::<gobject_sys::GValue>() * t.len())
+                as *mut gobject_sys::GValue;
             for (i, v) in t.iter().enumerate() {
-                gobject_ffi::g_value_init(res.add(i), v.type_().to_glib());
-                gobject_ffi::g_value_copy(v.to_glib_none().0, res.add(i));
+                gobject_sys::g_value_init(res.add(i), v.type_().to_glib());
+                gobject_sys::g_value_copy(v.to_glib_none().0, res.add(i));
             }
             res
         }
     }
 }
 
-impl<'a> ToGlibContainerFromSlice<'a, *const gobject_ffi::GValue> for &'a Value {
+#[doc(hidden)]
+impl<'a> ToGlibContainerFromSlice<'a, *const gobject_sys::GValue> for &'a Value {
     type Storage = &'a [&'a Value];
 
-    fn to_glib_none_from_slice(t: &'a [&'a Value]) -> (*const gobject_ffi::GValue, &'a [&'a Value]) {
-        let (ptr, storage) = ToGlibContainerFromSlice::<'a, *mut gobject_ffi::GValue>::to_glib_none_from_slice(t);
+    fn to_glib_none_from_slice(
+        t: &'a [&'a Value],
+    ) -> (*const gobject_sys::GValue, &'a [&'a Value]) {
+        let (ptr, storage) =
+            ToGlibContainerFromSlice::<'a, *mut gobject_sys::GValue>::to_glib_none_from_slice(t);
         (ptr as *const _, storage)
     }
 
-    fn to_glib_container_from_slice(_: &'a [&'a Value]) -> (*const gobject_ffi::GValue, &'a [&'a Value]) {
+    fn to_glib_container_from_slice(
+        _: &'a [&'a Value],
+    ) -> (*const gobject_sys::GValue, &'a [&'a Value]) {
         unimplemented!()
     }
 
-    fn to_glib_full_from_slice(_: &[&'a Value]) -> *const gobject_ffi::GValue {
+    fn to_glib_full_from_slice(_: &[&'a Value]) -> *const gobject_sys::GValue {
         unimplemented!()
     }
 }
 
 macro_rules! from_glib {
     ($name:ident, $wrap:expr) => {
-        impl FromGlibPtrNone<*const gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_none(ptr: *const gobject_ffi::GValue) -> Self {
+        impl FromGlibPtrNone<*const gobject_sys::GValue> for $name {
+            unsafe fn from_glib_none(ptr: *const gobject_sys::GValue) -> Self {
                 let mut ret = Value::from_type(from_glib((*ptr).g_type));
-                gobject_ffi::g_value_copy(ptr, ret.to_glib_none_mut().0);
+                gobject_sys::g_value_copy(ptr, ret.to_glib_none_mut().0);
                 $wrap(ret)
             }
         }
 
-        impl FromGlibPtrNone<*mut gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_none(ptr: *mut gobject_ffi::GValue) -> Self {
+        impl FromGlibPtrNone<*mut gobject_sys::GValue> for $name {
+            unsafe fn from_glib_none(ptr: *mut gobject_sys::GValue) -> Self {
                 from_glib_none(ptr as *const _)
             }
         }
 
-        impl FromGlibPtrFull<*mut gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_full(ptr: *mut gobject_ffi::GValue) -> Self {
+        impl FromGlibPtrFull<*mut gobject_sys::GValue> for $name {
+            unsafe fn from_glib_full(ptr: *mut gobject_sys::GValue) -> Self {
                 let mut ret = Value::uninitialized();
                 ptr::swap(&mut ret.0, ptr);
-                glib_ffi::g_free(ptr as *mut c_void);
+                glib_sys::g_free(ptr as *mut c_void);
                 $wrap(ret)
             }
         }
 
-        impl FromGlibContainerAsVec<*mut gobject_ffi::GValue, *mut *mut gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_none_num_as_vec(ptr: *mut *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+        impl FromGlibContainerAsVec<*mut gobject_sys::GValue, *mut *mut gobject_sys::GValue>
+            for $name
+        {
+            unsafe fn from_glib_none_num_as_vec(
+                ptr: *mut *mut gobject_sys::GValue,
+                num: usize,
+            ) -> Vec<Self> {
                 if num == 0 || ptr.is_null() {
                     return Vec::new();
                 }
@@ -389,13 +412,19 @@ macro_rules! from_glib {
                 res
             }
 
-            unsafe fn from_glib_container_num_as_vec(ptr: *mut *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+            unsafe fn from_glib_container_num_as_vec(
+                ptr: *mut *mut gobject_sys::GValue,
+                num: usize,
+            ) -> Vec<Self> {
                 let res = FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, num);
-                glib_ffi::g_free(ptr as *mut _);
+                glib_sys::g_free(ptr as *mut _);
                 res
             }
 
-            unsafe fn from_glib_full_num_as_vec(ptr: *mut *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+            unsafe fn from_glib_full_num_as_vec(
+                ptr: *mut *mut gobject_sys::GValue,
+                num: usize,
+            ) -> Vec<Self> {
                 if num == 0 || ptr.is_null() {
                     return Vec::new();
                 }
@@ -404,62 +433,80 @@ macro_rules! from_glib {
                 for i in 0..num {
                     res.push(from_glib_full(ptr::read(ptr.add(i))));
                 }
-                glib_ffi::g_free(ptr as *mut _);
+                glib_sys::g_free(ptr as *mut _);
                 res
             }
         }
 
-        impl FromGlibPtrArrayContainerAsVec<*mut gobject_ffi::GValue, *mut *mut gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_none_as_vec(ptr: *mut *mut gobject_ffi::GValue) -> Vec<Self> {
+        impl FromGlibPtrArrayContainerAsVec<*mut gobject_sys::GValue, *mut *mut gobject_sys::GValue>
+            for $name
+        {
+            unsafe fn from_glib_none_as_vec(ptr: *mut *mut gobject_sys::GValue) -> Vec<Self> {
                 FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, c_ptr_array_len(ptr))
             }
 
-            unsafe fn from_glib_container_as_vec(ptr: *mut *mut gobject_ffi::GValue) -> Vec<Self> {
+            unsafe fn from_glib_container_as_vec(ptr: *mut *mut gobject_sys::GValue) -> Vec<Self> {
                 FromGlibContainerAsVec::from_glib_container_num_as_vec(ptr, c_ptr_array_len(ptr))
             }
 
-            unsafe fn from_glib_full_as_vec(ptr: *mut *mut gobject_ffi::GValue) -> Vec<Self> {
+            unsafe fn from_glib_full_as_vec(ptr: *mut *mut gobject_sys::GValue) -> Vec<Self> {
                 FromGlibContainerAsVec::from_glib_full_num_as_vec(ptr, c_ptr_array_len(ptr))
             }
         }
 
-        impl FromGlibContainerAsVec<*mut gobject_ffi::GValue, *const *mut gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_none_num_as_vec(ptr: *const *mut gobject_ffi::GValue, num: usize) -> Vec<Self> {
+        impl FromGlibContainerAsVec<*mut gobject_sys::GValue, *const *mut gobject_sys::GValue>
+            for $name
+        {
+            unsafe fn from_glib_none_num_as_vec(
+                ptr: *const *mut gobject_sys::GValue,
+                num: usize,
+            ) -> Vec<Self> {
                 FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr as *mut *mut _, num)
             }
 
-            unsafe fn from_glib_container_num_as_vec(_: *const *mut gobject_ffi::GValue, _: usize) -> Vec<Self> {
+            unsafe fn from_glib_container_num_as_vec(
+                _: *const *mut gobject_sys::GValue,
+                _: usize,
+            ) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
             }
 
-            unsafe fn from_glib_full_num_as_vec(_: *const *mut gobject_ffi::GValue, _: usize) -> Vec<Self> {
+            unsafe fn from_glib_full_num_as_vec(
+                _: *const *mut gobject_sys::GValue,
+                _: usize,
+            ) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
             }
         }
 
-        impl FromGlibPtrArrayContainerAsVec<*mut gobject_ffi::GValue, *const *mut gobject_ffi::GValue> for $name {
-            unsafe fn from_glib_none_as_vec(ptr: *const *mut gobject_ffi::GValue) -> Vec<Self> {
+        impl
+            FromGlibPtrArrayContainerAsVec<
+                *mut gobject_sys::GValue,
+                *const *mut gobject_sys::GValue,
+            > for $name
+        {
+            unsafe fn from_glib_none_as_vec(ptr: *const *mut gobject_sys::GValue) -> Vec<Self> {
                 FromGlibPtrArrayContainerAsVec::from_glib_none_as_vec(ptr as *mut *mut _)
             }
 
-            unsafe fn from_glib_container_as_vec(_: *const *mut gobject_ffi::GValue) -> Vec<Self> {
+            unsafe fn from_glib_container_as_vec(_: *const *mut gobject_sys::GValue) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
             }
 
-            unsafe fn from_glib_full_as_vec(_: *const *mut gobject_ffi::GValue) -> Vec<Self> {
+            unsafe fn from_glib_full_as_vec(_: *const *mut gobject_sys::GValue) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
             }
         }
-    }
+    };
 }
 
 from_glib!(Value, |v| v);
 
-pub struct ValueArray(Vec<gobject_ffi::GValue>);
+pub struct ValueArray(Vec<gobject_sys::GValue>);
 
 impl Drop for ValueArray {
     fn drop(&mut self) {
@@ -467,8 +514,8 @@ impl Drop for ValueArray {
             for value in &mut self.0 {
                 // Before GLib 2.48, unsetting a zeroed GValue would give critical warnings
                 // https://bugzilla.gnome.org/show_bug.cgi?id=755766
-                if value.g_type != gobject_ffi::G_TYPE_INVALID {
-                    gobject_ffi::g_value_unset(value);
+                if value.g_type != gobject_sys::G_TYPE_INVALID {
+                    gobject_sys::g_value_unset(value);
                 }
             }
         }
@@ -498,35 +545,45 @@ impl<'a, T: FromValueOptional<'a> + SetValue> TypedValue<T> {
     ///
     /// This method is only available for types that don't support a `None`
     /// value.
-    pub fn get_some(&'a self) -> T where T: FromValue<'a> {
+    pub fn get_some(&'a self) -> T
+    where
+        T: FromValue<'a>,
+    {
         unsafe { T::from_value(self) }
     }
 
     /// Sets the value.
     ///
     /// This method is only available for types that support a `None` value.
-    pub fn set<U: ?Sized + SetValueOptional>(&mut self, value: Option<&U>) where T: Borrow<U> {
+    pub fn set<U: ?Sized + SetValueOptional>(&mut self, value: Option<&U>)
+    where
+        T: Borrow<U>,
+    {
         unsafe { SetValueOptional::set_value_optional(&mut self.0, value) }
     }
 
     /// Sets the value to `None`.
     ///
     /// This method is only available for types that support a `None` value.
-    pub fn set_none(&mut self) where T: SetValueOptional {
+    pub fn set_none(&mut self)
+    where
+        T: SetValueOptional,
+    {
         unsafe { T::set_value_optional(&mut self.0, None) }
     }
 
     /// Sets the value.
-    pub fn set_some<U: ?Sized + SetValue>(&mut self, value: &U) where T: Borrow<U> {
+    pub fn set_some<U: ?Sized + SetValue>(&mut self, value: &U)
+    where
+        T: Borrow<U>,
+    {
         unsafe { SetValue::set_value(&mut self.0, value) }
     }
 }
 
 impl<T> fmt::Debug for TypedValue<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_tuple("TypedValue")
-            .field(&self.0)
-            .finish()
+        f.debug_tuple("TypedValue").field(&self.0).finish()
     }
 }
 
@@ -580,10 +637,11 @@ impl<'a> From<TypedValue<String>> for TypedValue<&'a str> {
     }
 }
 
-impl<'a, T: 'a> ToGlibPtrMut<'a, *mut gobject_ffi::GValue> for TypedValue<T> {
+#[doc(hidden)]
+impl<'a, T: 'a> ToGlibPtrMut<'a, *mut gobject_sys::GValue> for TypedValue<T> {
     type Storage = &'a mut TypedValue<T>;
 
-    fn to_glib_none_mut(&'a mut self) -> StashMut<'a, *mut gobject_ffi::GValue, Self> {
+    fn to_glib_none_mut(&'a mut self) -> StashMut<'a, *mut gobject_sys::GValue, Self> {
         StashMut(&mut (self.0).0, self)
     }
 }
@@ -653,7 +711,9 @@ impl SendValue {
     ///
     /// Returns `Ok(TypedValue<T>)` if the value carries a type corresponding
     /// to `T` and `Err(self)` otherwise.
-    pub fn downcast<'a, T: FromValueOptional<'a> + SetValue + Send>(self) -> Result<TypedValue<T>, Self> {
+    pub fn downcast<'a, T: FromValueOptional<'a> + SetValue + Send>(
+        self,
+    ) -> Result<TypedValue<T>, Self> {
         self.0.downcast().map_err(SendValue)
     }
 
@@ -663,31 +723,29 @@ impl SendValue {
     /// to `T` and `None` otherwise.
     pub fn downcast_ref<'a, T: FromValueOptional<'a> + SetValue>(&self) -> Option<&TypedValue<T>> {
         unsafe {
-            let ok = from_glib(
-                gobject_ffi::g_type_check_value_holds(mut_override(self.to_glib_none().0),
-                    T::static_type().to_glib()));
+            let ok = from_glib(gobject_sys::g_type_check_value_holds(
+                mut_override(self.to_glib_none().0),
+                T::static_type().to_glib(),
+            ));
             if ok {
-                // This transmute is safe because Value and TypedValue have the same
+                // This transmute is safe because SendValue and TypedValue have the same
                 // representation: the only difference is the zero-sized phantom data
-                Some(mem::transmute(self))
-            }
-            else {
+                Some(&*(self as *const SendValue as *const TypedValue<T>))
+            } else {
                 None
             }
         }
     }
 
     #[doc(hidden)]
-    pub fn into_raw(self) -> gobject_ffi::GValue {
+    pub fn into_raw(self) -> gobject_sys::GValue {
         self.0.into_raw()
     }
 }
 
 impl fmt::Debug for SendValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_tuple("SendValue")
-            .field(&self.0)
-            .finish()
+        f.debug_tuple("SendValue").field(&self.0).finish()
     }
 }
 
@@ -721,10 +779,11 @@ impl<T: Send> From<TypedValue<T>> for SendValue {
 
 from_glib!(SendValue, SendValue);
 
-impl<'a> ToGlibPtrMut<'a, *mut gobject_ffi::GValue> for SendValue {
+#[doc(hidden)]
+impl<'a> ToGlibPtrMut<'a, *mut gobject_sys::GValue> for SendValue {
     type Storage = &'a mut SendValue;
 
-    fn to_glib_none_mut(&'a mut self) -> StashMut<'a, *mut gobject_ffi::GValue, Self> {
+    fn to_glib_none_mut(&'a mut self) -> StashMut<'a, *mut gobject_sys::GValue, Self> {
         StashMut(&mut (self.0).0, self)
     }
 }
@@ -791,13 +850,13 @@ pub trait SetValue: StaticType {
 
 impl<'a> FromValueOptional<'a> for String {
     unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
-        from_glib_none(gobject_ffi::g_value_get_string(value.to_glib_none().0))
+        from_glib_none(gobject_sys::g_value_get_string(value.to_glib_none().0))
     }
 }
 
 impl<'a> FromValueOptional<'a> for &'a str {
     unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
-        let cstr = gobject_ffi::g_value_get_string(value.to_glib_none().0);
+        let cstr = gobject_sys::g_value_get_string(value.to_glib_none().0);
         if cstr.is_null() {
             None
         } else {
@@ -808,13 +867,13 @@ impl<'a> FromValueOptional<'a> for &'a str {
 
 impl SetValue for str {
     unsafe fn set_value(value: &mut Value, this: &Self) {
-        gobject_ffi::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
+        gobject_sys::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
     }
 }
 
 impl SetValueOptional for str {
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
-        gobject_ffi::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
+        gobject_sys::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
     }
 }
 
@@ -826,7 +885,7 @@ impl<'a> FromValueOptional<'a> for Vec<String> {
 
 impl<'a> FromValue<'a> for Vec<String> {
     unsafe fn from_value(value: &'a Value) -> Self {
-        let ptr = gobject_ffi::g_value_get_boxed(value.to_glib_none().0) as *const *const c_char;
+        let ptr = gobject_sys::g_value_get_boxed(value.to_glib_none().0) as *const *const c_char;
         FromGlibPtrContainer::from_glib_none(ptr)
     }
 }
@@ -839,7 +898,7 @@ impl<'a> FromValueOptional<'a> for Vec<GString> {
 
 impl<'a> FromValue<'a> for Vec<GString> {
     unsafe fn from_value(value: &'a Value) -> Self {
-        let ptr = gobject_ffi::g_value_get_boxed(value.to_glib_none().0) as *const *const c_char;
+        let ptr = gobject_sys::g_value_get_boxed(value.to_glib_none().0) as *const *const c_char;
         FromGlibPtrContainer::from_glib_none(ptr)
     }
 }
@@ -847,28 +906,29 @@ impl<'a> FromValue<'a> for Vec<GString> {
 impl<'a> SetValue for [&'a str] {
     unsafe fn set_value(value: &mut Value, this: &Self) {
         let ptr: *mut *mut c_char = this.to_glib_full();
-        gobject_ffi::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
+        gobject_sys::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
     }
 }
 
 impl<'a> SetValueOptional for [&'a str] {
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
         let ptr: *mut *mut c_char = this.to_glib_full();
-        gobject_ffi::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
+        gobject_sys::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
     }
 }
 
 impl SetValue for Vec<String> {
     unsafe fn set_value(value: &mut Value, this: &Self) {
         let ptr: *mut *mut c_char = this.to_glib_full();
-        gobject_ffi::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
+        gobject_sys::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
     }
 }
 
 impl SetValueOptional for Vec<String> {
+    #[allow(clippy::redundant_closure)]
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
         let ptr: *mut *mut c_char = this.map(|v| v.to_glib_full()).unwrap_or(ptr::null_mut());
-        gobject_ffi::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
+        gobject_sys::g_value_take_boxed(value.to_glib_none_mut().0, ptr as *const c_void)
     }
 }
 
@@ -880,37 +940,39 @@ impl<'a, T: ?Sized + SetValue> SetValue for &'a T {
 
 impl<'a, T: ?Sized + SetValueOptional> SetValueOptional for &'a T {
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
-        SetValueOptional::set_value_optional(value, this.map(|v| *v))
+        SetValueOptional::set_value_optional(value, this.cloned())
     }
 }
 
 impl SetValue for String {
     unsafe fn set_value(value: &mut Value, this: &Self) {
-        gobject_ffi::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
+        gobject_sys::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
     }
 }
 
 impl SetValueOptional for String {
     unsafe fn set_value_optional(value: &mut Value, this: Option<&Self>) {
-        gobject_ffi::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
+        gobject_sys::g_value_take_string(value.to_glib_none_mut().0, this.to_glib_full())
     }
 }
 
 impl<'a> FromValueOptional<'a> for bool {
     unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
-        Some(from_glib(gobject_ffi::g_value_get_boolean(value.to_glib_none().0)))
+        Some(from_glib(gobject_sys::g_value_get_boolean(
+            value.to_glib_none().0,
+        )))
     }
 }
 
 impl<'a> FromValue<'a> for bool {
     unsafe fn from_value(value: &'a Value) -> Self {
-        from_glib(gobject_ffi::g_value_get_boolean(value.to_glib_none().0))
+        from_glib(gobject_sys::g_value_get_boolean(value.to_glib_none().0))
     }
 }
 
 impl SetValue for bool {
     unsafe fn set_value(value: &mut Value, this: &Self) {
-        gobject_ffi::g_value_set_boolean(value.to_glib_none_mut().0, this.to_glib())
+        gobject_sys::g_value_set_boolean(value.to_glib_none_mut().0, this.to_glib())
     }
 }
 
@@ -918,22 +980,22 @@ macro_rules! numeric {
     ($name:ident, $get:ident, $set:ident) => {
         impl<'a> FromValueOptional<'a> for $name {
             unsafe fn from_value_optional(value: &'a Value) -> Option<Self> {
-                Some(gobject_ffi::$get(value.to_glib_none().0))
+                Some(gobject_sys::$get(value.to_glib_none().0))
             }
         }
 
         impl<'a> FromValue<'a> for $name {
             unsafe fn from_value(value: &'a Value) -> Self {
-                gobject_ffi::$get(value.to_glib_none().0)
+                gobject_sys::$get(value.to_glib_none().0)
             }
         }
 
         impl SetValue for $name {
             unsafe fn set_value(value: &mut Value, this: &Self) {
-                gobject_ffi::$set(value.to_glib_none_mut().0, *this)
+                gobject_sys::$set(value.to_glib_none_mut().0, *this)
             }
         }
-    }
+    };
 }
 
 numeric!(i8, g_value_get_schar, g_value_set_schar);
@@ -962,9 +1024,15 @@ mod tests {
     #[test]
     fn test_strv() {
         let v = vec!["123", "456"].to_value();
-        assert_eq!(v.get::<Vec<GString>>(), Some(vec![GString::from("123"), GString::from("456")]));
+        assert_eq!(
+            v.get::<Vec<GString>>(),
+            Some(vec![GString::from("123"), GString::from("456")])
+        );
 
         let v = vec![String::from("123"), String::from("456")].to_value();
-        assert_eq!(v.get::<Vec<GString>>(), Some(vec![GString::from("123"), GString::from("456")]));
+        assert_eq!(
+            v.get::<Vec<GString>>(),
+            Some(vec![GString::from("123"), GString::from("456")])
+        );
     }
 }

@@ -2,35 +2,31 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <http://opensource.org/licenses/MIT>
 
+use get_thread_id;
+use glib_sys;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::fmt;
 use std::mem;
 use std::ptr;
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
-
+use translate::{mut_override, FromGlibPtrFull, FromGlibPtrNone, ToGlib, ToGlibPtr};
 use Continue;
 use MainContext;
 use Priority;
 use Source;
 use SourceId;
 
-use get_thread_id;
-
-use ffi as glib_ffi;
-use translate::{mut_override, FromGlibPtrFull, FromGlibPtrNone, ToGlib, ToGlibPtr};
-
-#[derive(Debug)]
 enum ChannelSourceState {
     NotAttached,
-    Attached(*mut glib_ffi::GSource),
+    Attached(*mut glib_sys::GSource),
     Destroyed,
 }
 
 unsafe impl Send for ChannelSourceState {}
 unsafe impl Sync for ChannelSourceState {}
 
-#[derive(Debug)]
 struct ChannelInner<T> {
     queue: VecDeque<T>,
     source: ChannelSourceState,
@@ -42,7 +38,7 @@ impl<T> ChannelInner<T> {
             ChannelSourceState::Destroyed => true,
             // Receiver exists but is already destroyed
             ChannelSourceState::Attached(source)
-                if unsafe { glib_ffi::g_source_is_destroyed(source) } != glib_ffi::GFALSE =>
+                if unsafe { glib_sys::g_source_is_destroyed(source) } != glib_sys::GFALSE =>
             {
                 true
             }
@@ -56,7 +52,7 @@ impl<T> ChannelInner<T> {
     fn set_ready_time(&mut self, ready_time: i64) {
         if let ChannelSourceState::Attached(source) = self.source {
             unsafe {
-                glib_ffi::g_source_set_ready_time(source, ready_time);
+                glib_sys::g_source_set_ready_time(source, ready_time);
             }
         }
     }
@@ -65,7 +61,7 @@ impl<T> ChannelInner<T> {
         match self.source {
             // Receiver exists and is not destroyed yet
             ChannelSourceState::Attached(source)
-                if unsafe { glib_ffi::g_source_is_destroyed(source) == glib_ffi::GFALSE } =>
+                if unsafe { glib_sys::g_source_is_destroyed(source) == glib_sys::GFALSE } =>
             {
                 Some(unsafe { Source::from_glib_none(source) })
             }
@@ -74,13 +70,11 @@ impl<T> ChannelInner<T> {
     }
 }
 
-#[derive(Debug)]
 struct ChannelBound {
     bound: usize,
     cond: Condvar,
 }
 
-#[derive(Debug)]
 struct Channel<T>(Arc<(Mutex<ChannelInner<T>>, Option<ChannelBound>)>);
 
 impl<T> Clone for Channel<T> {
@@ -220,47 +214,47 @@ impl<T> Channel<T> {
 
 #[repr(C)]
 struct ChannelSource<T, F: FnMut(T) -> Continue + 'static> {
-    source: glib_ffi::GSource,
+    source: glib_sys::GSource,
     thread_id: usize,
-    source_funcs: Option<Box<glib_ffi::GSourceFuncs>>,
+    source_funcs: Option<Box<glib_sys::GSourceFuncs>>,
     channel: Option<Channel<T>>,
     callback: Option<RefCell<F>>,
 }
 
 unsafe extern "C" fn prepare<T>(
-    source: *mut glib_ffi::GSource,
+    source: *mut glib_sys::GSource,
     timeout: *mut i32,
-) -> glib_ffi::gboolean {
+) -> glib_sys::gboolean {
     *timeout = -1;
 
     // We're always ready when the ready time was set to 0. There
     // will be at least one item or the senders are disconnected now
-    if glib_ffi::g_source_get_ready_time(source) == 0 {
-        glib_ffi::GTRUE
+    if glib_sys::g_source_get_ready_time(source) == 0 {
+        glib_sys::GTRUE
     } else {
-        glib_ffi::GFALSE
+        glib_sys::GFALSE
     }
 }
 
-unsafe extern "C" fn check<T>(source: *mut glib_ffi::GSource) -> glib_ffi::gboolean {
+unsafe extern "C" fn check<T>(source: *mut glib_sys::GSource) -> glib_sys::gboolean {
     // We're always ready when the ready time was set to 0. There
     // will be at least one item or the senders are disconnected now
-    if glib_ffi::g_source_get_ready_time(source) == 0 {
-        glib_ffi::GTRUE
+    if glib_sys::g_source_get_ready_time(source) == 0 {
+        glib_sys::GTRUE
     } else {
-        glib_ffi::GFALSE
+        glib_sys::GFALSE
     }
 }
 
 unsafe extern "C" fn dispatch<T, F: FnMut(T) -> Continue + 'static>(
-    source: *mut glib_ffi::GSource,
-    callback: glib_ffi::GSourceFunc,
-    _user_data: glib_ffi::gpointer,
-) -> glib_ffi::gboolean {
+    source: *mut glib_sys::GSource,
+    callback: glib_sys::GSourceFunc,
+    _user_data: glib_sys::gpointer,
+) -> glib_sys::gboolean {
     let source = &mut *(source as *mut ChannelSource<T, F>);
     assert!(callback.is_none());
 
-    glib_ffi::g_source_set_ready_time(&mut source.source, -1);
+    glib_sys::g_source_set_ready_time(&mut source.source, -1);
 
     // Check the thread to ensure we're only ever called from the same thread
     assert_eq!(
@@ -279,24 +273,24 @@ unsafe extern "C" fn dispatch<T, F: FnMut(T) -> Continue + 'static>(
     loop {
         match channel.try_recv() {
             Err(mpsc::TryRecvError::Empty) => break,
-            Err(mpsc::TryRecvError::Disconnected) => return glib_ffi::G_SOURCE_REMOVE,
+            Err(mpsc::TryRecvError::Disconnected) => return glib_sys::G_SOURCE_REMOVE,
             Ok(item) => {
                 let callback = source
                     .callback
                     .as_mut()
                     .expect("ChannelSource called before Receiver was attached");
                 if (&mut *callback.borrow_mut())(item) == Continue(false) {
-                    return glib_ffi::G_SOURCE_REMOVE;
+                    return glib_sys::G_SOURCE_REMOVE;
                 }
             }
         }
     }
 
-    glib_ffi::G_SOURCE_CONTINUE
+    glib_sys::G_SOURCE_CONTINUE
 }
 
 unsafe extern "C" fn finalize<T, F: FnMut(T) -> Continue + 'static>(
-    source: *mut glib_ffi::GSource,
+    source: *mut glib_sys::GSource,
 ) {
     let source = &mut *(source as *mut ChannelSource<T, F>);
 
@@ -324,8 +318,19 @@ unsafe extern "C" fn finalize<T, F: FnMut(T) -> Continue + 'static>(
 /// See [`MainContext::channel()`] for how to create such a `Sender`.
 ///
 /// [`MainContext::channel()`]: struct.MainContext.html#method.channel
-#[derive(Clone, Debug)]
 pub struct Sender<T>(Option<Channel<T>>);
+
+impl<T> fmt::Debug for Sender<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Sender").finish()
+    }
+}
+
+impl<T> Clone for Sender<T> {
+    fn clone(&self) -> Sender<T> {
+        Sender(self.0.clone())
+    }
+}
 
 impl<T> Sender<T> {
     /// Sends a value to the channel.
@@ -354,7 +359,7 @@ impl<T> Drop for Sender<T> {
 
             // Drop the channel and wake up the source/receiver
             drop(channel);
-            glib_ffi::g_source_set_ready_time(source.to_glib_none().0, 0);
+            glib_sys::g_source_set_ready_time(source.to_glib_none().0, 0);
         }
     }
 }
@@ -366,8 +371,19 @@ impl<T> Drop for Sender<T> {
 /// See [`MainContext::sync_channel()`] for how to create such a `SyncSender`.
 ///
 /// [`MainContext::sync_channel()`]: struct.MainContext.html#method.sync_channel
-#[derive(Clone, Debug)]
 pub struct SyncSender<T>(Option<Channel<T>>);
+
+impl<T> fmt::Debug for SyncSender<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("SyncSender").finish()
+    }
+}
+
+impl<T> Clone for SyncSender<T> {
+    fn clone(&self) -> SyncSender<T> {
+        SyncSender(self.0.clone())
+    }
+}
 
 impl<T> SyncSender<T> {
     /// Sends a value to the channel and blocks if the channel is full.
@@ -401,7 +417,7 @@ impl<T> Drop for SyncSender<T> {
 
             // Drop the channel and wake up the source/receiver
             drop(channel);
-            glib_ffi::g_source_set_ready_time(source.to_glib_none().0, 0);
+            glib_sys::g_source_set_ready_time(source.to_glib_none().0, 0);
         }
     }
 }
@@ -414,8 +430,13 @@ impl<T> Drop for SyncSender<T> {
 ///
 /// [`MainContext::channel()`]: struct.MainContext.html#method.channel
 /// [`MainContext::sync_channel()`]: struct.MainContext.html#method.sync_channel
-#[derive(Debug)]
 pub struct Receiver<T>(Option<Channel<T>>, Priority);
+
+impl<T> fmt::Debug for Receiver<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Receiver").finish()
+    }
+}
 
 // It's safe to send the Receiver to other threads for attaching it as
 // long as the items to be sent can also be sent between threads.
@@ -444,16 +465,15 @@ impl<T> Receiver<T> {
     ///
     /// This function panics if called from a thread that is not the owner of the provided
     /// `context`, or, if `None` is provided, of the thread default main context.
-    pub fn attach<'a, P: Into<Option<&'a MainContext>>, F: FnMut(T) -> Continue + 'static>(
+    pub fn attach<F: FnMut(T) -> Continue + 'static>(
         mut self,
-        context: P,
+        context: Option<&MainContext>,
         func: F,
     ) -> SourceId {
-        let context = context.into();
         unsafe {
             let channel = self.0.take().expect("Receiver without channel");
 
-            let source_funcs = Box::new(glib_ffi::GSourceFuncs {
+            let source_funcs = Box::new(glib_sys::GSourceFuncs {
                 check: Some(check::<T>),
                 prepare: Some(prepare::<T>),
                 dispatch: Some(dispatch::<T, F>),
@@ -462,7 +482,7 @@ impl<T> Receiver<T> {
                 closure_marshal: None,
             });
 
-            let source = glib_ffi::g_source_new(
+            let source = glib_sys::g_source_new(
                 mut_override(&*source_funcs),
                 mem::size_of::<ChannelSource<T, F>>() as u32,
             ) as *mut ChannelSource<T, F>;
@@ -473,10 +493,10 @@ impl<T> Receiver<T> {
                 let source = &mut *source;
                 let mut inner = (channel.0).0.lock().unwrap();
 
-                glib_ffi::g_source_set_priority(mut_override(&source.source), self.1.to_glib());
+                glib_sys::g_source_set_priority(mut_override(&source.source), self.1.to_glib());
 
                 // We're immediately ready if the queue is not empty or if no sender is left at this point
-                glib_ffi::g_source_set_ready_time(
+                glib_sys::g_source_set_ready_time(
                     mut_override(&source.source),
                     if !inner.queue.is_empty() || Arc::strong_count(&channel.0) == 1 {
                         0
@@ -497,16 +517,14 @@ impl<T> Receiver<T> {
             }
 
             let source = Source::from_glib_full(mut_override(&(*source).source));
-            let id = if let Some(context) = context {
+            if let Some(context) = context {
                 assert!(context.is_owner());
-                source.attach(context)
+                source.attach(Some(context))
             } else {
                 let context = MainContext::ref_thread_default();
                 assert!(context.is_owner());
-                source.attach(&context)
-            };
-
-            id
+                source.attach(Some(&context))
+            }
         }
     }
 }
@@ -577,7 +595,7 @@ mod tests {
         let sum = Rc::new(RefCell::new(0));
         let sum_clone = sum.clone();
         let l_clone = l.clone();
-        receiver.attach(&c, move |item| {
+        receiver.attach(Some(&c), move |item| {
             *sum_clone.borrow_mut() += item;
             if *sum_clone.borrow() == 6 {
                 l_clone.quit();
@@ -613,7 +631,7 @@ mod tests {
         }
 
         let helper = Helper(l.clone());
-        receiver.attach(&c, move |_| {
+        receiver.attach(Some(&c), move |_| {
             let _ = helper;
 
             Continue(true)
@@ -640,7 +658,7 @@ mod tests {
 
         let (sender, receiver) = MainContext::channel::<i32>(Priority::default());
 
-        let source_id = receiver.attach(&c, move |_| Continue(true));
+        let source_id = receiver.attach(Some(&c), move |_| Continue(true));
 
         let source = c.find_source_by_id(&source_id).unwrap();
         source.destroy();
@@ -665,7 +683,7 @@ mod tests {
 
         let dropped = Arc::new(Mutex::new(false));
         let helper = Helper(dropped.clone());
-        let source_id = receiver.attach(&c, move |_| {
+        let source_id = receiver.attach(Some(&c), move |_| {
             let _helper = &helper;
             Continue(true)
         });
@@ -692,7 +710,7 @@ mod tests {
         let sum = Rc::new(RefCell::new(0));
         let sum_clone = sum.clone();
         let l_clone = l.clone();
-        receiver.attach(&c, move |item| {
+        receiver.attach(Some(&c), move |item| {
             *sum_clone.borrow_mut() += item;
             if *sum_clone.borrow() == 6 {
                 l_clone.quit();
@@ -741,7 +759,7 @@ mod tests {
         let sum = Rc::new(RefCell::new(0));
         let sum_clone = sum.clone();
         let l_clone = l.clone();
-        receiver.attach(&c, move |item| {
+        receiver.attach(Some(&c), move |item| {
             *sum_clone.borrow_mut() += item;
             if *sum_clone.borrow() == 6 {
                 l_clone.quit();
@@ -843,7 +861,7 @@ mod tests {
         let sum = Rc::new(RefCell::new(0));
         let sum_clone = sum.clone();
         let l_clone = l.clone();
-        receiver.attach(&c, move |item| {
+        receiver.attach(Some(&c), move |item| {
             // We consumed one item so there should be one item on
             // the other receiver now.
             let _ = wait_receiver.recv().unwrap();
