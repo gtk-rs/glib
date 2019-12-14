@@ -246,6 +246,7 @@ pub trait ObjectSubclass: ObjectImpl + Sized + 'static {
 
     /// Parent Rust type to inherit from.
     type ParentType: ObjectType
+        + FromGlibPtrFull<*mut <Self::ParentType as ObjectType>::GlibType>
         + FromGlibPtrBorrow<*mut <Self::ParentType as ObjectType>::GlibType>
         + FromGlibPtrNone<*mut <Self::ParentType as ObjectType>::GlibType>;
 
@@ -298,7 +299,10 @@ pub trait ObjectSubclass: ObjectImpl + Sized + 'static {
             let ptr = ptr.offset(offset);
             let ptr = ptr as *mut u8 as *mut <Self::ParentType as ObjectType>::GlibType;
 
-            from_glib_none(ptr)
+            // Don't steal floating reference here via from_glib_none() but
+            // preserve it if needed by reffing manually.
+            gobject_sys::g_object_ref(ptr as *mut gobject_sys::GObject);
+            from_glib_full(ptr)
         }
     }
 
@@ -407,8 +411,6 @@ unsafe extern "C" fn instance_init<T: ObjectSubclass>(
     obj: *mut gobject_sys::GTypeInstance,
     klass: glib_sys::gpointer,
 ) {
-    glib_floating_reference_guard!(obj);
-
     // Get offset to the storage of our private struct, create it
     // and actually store it in that place.
     let mut data = T::type_data();

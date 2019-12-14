@@ -6,6 +6,7 @@
 
 use glib_sys;
 use gobject_sys;
+use std::cmp;
 use std::fmt;
 use std::hash;
 use std::marker::PhantomData;
@@ -375,15 +376,326 @@ pub trait CanDowncast<T> {}
 
 impl<Super: IsA<Super>, Sub: IsA<Super>> CanDowncast<Sub> for Super {}
 
-glib_wrapper! {
-    #[doc(hidden)]
-    #[derive(Debug, Ord, PartialOrd, PartialEq, Eq, Hash)]
-    pub struct ObjectRef(Shared<GObject>);
+// Manual implementation of glib_shared_wrapper! because of special cases
+pub struct ObjectRef {
+    inner: ptr::NonNull<GObject>,
+    borrowed: bool,
+}
 
-    match fn {
-        ref => |ptr| gobject_sys::g_object_ref_sink(ptr),
-        unref => |ptr| gobject_sys::g_object_unref(ptr),
+impl Clone for ObjectRef {
+    fn clone(&self) -> Self {
+        unsafe {
+            ObjectRef {
+                inner: ptr::NonNull::new_unchecked(gobject_sys::g_object_ref(self.inner.as_ptr())),
+                borrowed: false,
+            }
+        }
     }
+}
+
+impl Drop for ObjectRef {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.borrowed {
+                gobject_sys::g_object_unref(self.inner.as_ptr());
+            }
+        }
+    }
+}
+
+impl fmt::Debug for ObjectRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let type_ = unsafe {
+            let klass = (*self.inner.as_ptr()).g_type_instance.g_class as *const ObjectClass;
+            (&*klass).get_type()
+        };
+
+        f.debug_struct("ObjectRef")
+            .field("inner", &self.inner)
+            .field("type", &type_)
+            .field("borrowed", &self.borrowed)
+            .finish()
+    }
+}
+
+impl PartialOrd for ObjectRef {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.inner.partial_cmp(&other.inner)
+    }
+}
+
+impl Ord for ObjectRef {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.inner.cmp(&other.inner)
+    }
+}
+
+impl PartialEq for ObjectRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl Eq for ObjectRef {}
+
+impl hash::Hash for ObjectRef {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: hash::Hasher,
+    {
+        self.inner.hash(state)
+    }
+}
+
+#[doc(hidden)]
+impl GlibPtrDefault for ObjectRef {
+    type GlibType = *mut GObject;
+}
+
+#[doc(hidden)]
+impl<'a> ToGlibPtr<'a, *mut GObject> for ObjectRef {
+    type Storage = &'a ObjectRef;
+
+    #[inline]
+    fn to_glib_none(&'a self) -> Stash<'a, *mut GObject, Self> {
+        Stash(self.inner.as_ptr(), self)
+    }
+
+    #[inline]
+    fn to_glib_full(&self) -> *mut GObject {
+        unsafe { gobject_sys::g_object_ref(self.inner.as_ptr()) }
+    }
+}
+
+#[doc(hidden)]
+impl<'a> ToGlibContainerFromSlice<'a, *mut *mut GObject> for ObjectRef {
+    type Storage = (
+        Vec<Stash<'a, *mut GObject, ObjectRef>>,
+        Option<Vec<*mut GObject>>,
+    );
+
+    fn to_glib_none_from_slice(t: &'a [ObjectRef]) -> (*mut *mut GObject, Self::Storage) {
+        let v: Vec<_> = t.iter().map(|s| s.to_glib_none()).collect();
+        let mut v_ptr: Vec<_> = v.iter().map(|s| s.0).collect();
+        v_ptr.push(ptr::null_mut() as *mut GObject);
+
+        (v_ptr.as_ptr() as *mut *mut GObject, (v, Some(v_ptr)))
+    }
+
+    fn to_glib_container_from_slice(t: &'a [ObjectRef]) -> (*mut *mut GObject, Self::Storage) {
+        let v: Vec<_> = t.iter().map(|s| s.to_glib_none()).collect();
+
+        let v_ptr = unsafe {
+            let v_ptr = glib_sys::g_malloc0(mem::size_of::<*mut GObject>() * (t.len() + 1))
+                as *mut *mut GObject;
+
+            for (i, s) in v.iter().enumerate() {
+                ptr::write(v_ptr.add(i), s.0);
+            }
+
+            v_ptr
+        };
+
+        (v_ptr, (v, None))
+    }
+
+    fn to_glib_full_from_slice(t: &[ObjectRef]) -> *mut *mut GObject {
+        unsafe {
+            let v_ptr = glib_sys::g_malloc0(std::mem::size_of::<*mut GObject>() * (t.len() + 1))
+                as *mut *mut GObject;
+
+            for (i, s) in t.iter().enumerate() {
+                ptr::write(v_ptr.add(i), s.to_glib_full());
+            }
+
+            v_ptr
+        }
+    }
+}
+
+#[doc(hidden)]
+impl<'a> ToGlibContainerFromSlice<'a, *const *mut GObject> for ObjectRef {
+    type Storage = (
+        Vec<Stash<'a, *mut GObject, ObjectRef>>,
+        Option<Vec<*mut GObject>>,
+    );
+
+    fn to_glib_none_from_slice(t: &'a [ObjectRef]) -> (*const *mut GObject, Self::Storage) {
+        let (ptr, stash) =
+            ToGlibContainerFromSlice::<'a, *mut *mut GObject>::to_glib_none_from_slice(t);
+        (ptr as *const *mut GObject, stash)
+    }
+
+    fn to_glib_container_from_slice(_: &'a [ObjectRef]) -> (*const *mut GObject, Self::Storage) {
+        // Can't have consumer free a *const pointer
+        unimplemented!()
+    }
+
+    fn to_glib_full_from_slice(_: &[ObjectRef]) -> *const *mut GObject {
+        // Can't have consumer free a *const pointer
+        unimplemented!()
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrNone<*mut GObject> for ObjectRef {
+    #[inline]
+    unsafe fn from_glib_none(ptr: *mut GObject) -> Self {
+        assert!(!ptr.is_null());
+
+        // Attention: This takes ownership of floating references!
+        ObjectRef {
+            inner: ptr::NonNull::new_unchecked(gobject_sys::g_object_ref_sink(ptr)),
+            borrowed: false,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrNone<*const GObject> for ObjectRef {
+    #[inline]
+    unsafe fn from_glib_none(ptr: *const GObject) -> Self {
+        // Attention: This takes ownership of floating references!
+        from_glib_none(ptr as *mut GObject)
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrFull<*mut GObject> for ObjectRef {
+    #[inline]
+    unsafe fn from_glib_full(ptr: *mut GObject) -> Self {
+        assert!(!ptr.is_null());
+
+        ObjectRef {
+            inner: ptr::NonNull::new_unchecked(ptr),
+            borrowed: false,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrBorrow<*mut GObject> for ObjectRef {
+    #[inline]
+    unsafe fn from_glib_borrow(ptr: *mut GObject) -> Self {
+        assert!(!ptr.is_null());
+
+        ObjectRef {
+            inner: ptr::NonNull::new_unchecked(ptr),
+            borrowed: true,
+        }
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrBorrow<*const GObject> for ObjectRef {
+    #[inline]
+    unsafe fn from_glib_borrow(ptr: *const GObject) -> Self {
+        from_glib_borrow(ptr as *mut GObject)
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibContainerAsVec<*mut GObject, *mut *mut GObject> for ObjectRef {
+    unsafe fn from_glib_none_num_as_vec(ptr: *mut *mut GObject, num: usize) -> Vec<Self> {
+        if num == 0 || ptr.is_null() {
+            return Vec::new();
+        }
+
+        // Attention: This takes ownership of floating references!
+        let mut res = Vec::with_capacity(num);
+        for i in 0..num {
+            res.push(from_glib_none(ptr::read(ptr.add(i))));
+        }
+        res
+    }
+
+    unsafe fn from_glib_container_num_as_vec(ptr: *mut *mut GObject, num: usize) -> Vec<Self> {
+        // Attention: This takes ownership of floating references!
+        let res = FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, num);
+        glib_sys::g_free(ptr as *mut _);
+        res
+    }
+
+    unsafe fn from_glib_full_num_as_vec(ptr: *mut *mut GObject, num: usize) -> Vec<Self> {
+        if num == 0 || ptr.is_null() {
+            return Vec::new();
+        }
+
+        let mut res = Vec::with_capacity(num);
+        for i in 0..num {
+            res.push(from_glib_full(ptr::read(ptr.add(i))));
+        }
+        glib_sys::g_free(ptr as *mut _);
+        res
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrArrayContainerAsVec<*mut GObject, *mut *mut GObject> for ObjectRef {
+    unsafe fn from_glib_none_as_vec(ptr: *mut *mut GObject) -> Vec<Self> {
+        // Attention: This takes ownership of floating references!
+        FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, c_ptr_array_len(ptr))
+    }
+
+    unsafe fn from_glib_container_as_vec(ptr: *mut *mut GObject) -> Vec<Self> {
+        // Attention: This takes ownership of floating references!
+        FromGlibContainerAsVec::from_glib_container_num_as_vec(ptr, c_ptr_array_len(ptr))
+    }
+
+    unsafe fn from_glib_full_as_vec(ptr: *mut *mut GObject) -> Vec<Self> {
+        FromGlibContainerAsVec::from_glib_full_num_as_vec(ptr, c_ptr_array_len(ptr))
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibContainerAsVec<*mut GObject, *const *mut GObject> for ObjectRef {
+    unsafe fn from_glib_none_num_as_vec(ptr: *const *mut GObject, num: usize) -> Vec<Self> {
+        // Attention: This takes ownership of floating references!
+        FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr as *mut *mut _, num)
+    }
+
+    unsafe fn from_glib_container_num_as_vec(_: *const *mut GObject, _: usize) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+
+    unsafe fn from_glib_full_num_as_vec(_: *const *mut GObject, _: usize) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+}
+
+#[doc(hidden)]
+impl FromGlibPtrArrayContainerAsVec<*mut GObject, *const *mut GObject> for ObjectRef {
+    unsafe fn from_glib_none_as_vec(ptr: *const *mut GObject) -> Vec<Self> {
+        // Attention: This takes ownership of floating references!
+        FromGlibPtrArrayContainerAsVec::from_glib_none_as_vec(ptr as *mut *mut _)
+    }
+
+    unsafe fn from_glib_container_as_vec(_: *const *mut GObject) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+
+    unsafe fn from_glib_full_as_vec(_: *const *mut GObject) -> Vec<Self> {
+        // Can't free a *const
+        unimplemented!()
+    }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! glib_weak_impl {
+    ($name:ident) => {
+        #[doc(hidden)]
+        impl $crate::clone::Downgrade for $name {
+            type Weak = $crate::object::WeakRef<Self>;
+
+            fn downgrade(&self) -> Self::Weak {
+                <Self as $crate::object::ObjectExt>::downgrade(&self)
+            }
+        }
+    };
 }
 
 /// ObjectType implementations for Object types. See `glib_wrapper!`.
@@ -407,6 +719,7 @@ macro_rules! glib_object_wrapper {
 
         #[doc(hidden)]
         impl $crate::object::UnsafeFrom<$crate::object::ObjectRef> for $name {
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn unsafe_from(t: $crate::object::ObjectRef) -> Self {
                 $name(t, ::std::marker::PhantomData)
             }
@@ -548,6 +861,7 @@ macro_rules! glib_object_wrapper {
         impl $crate::translate::FromGlibPtrNone<*mut $ffi_name> for $name {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_none(ptr: *mut $ffi_name) -> Self {
                 debug_assert!($crate::types::instance_of::<Self>(ptr as *const _));
                 $name($crate::translate::from_glib_none(ptr as *mut _), ::std::marker::PhantomData)
@@ -558,6 +872,7 @@ macro_rules! glib_object_wrapper {
         impl $crate::translate::FromGlibPtrNone<*const $ffi_name> for $name {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_none(ptr: *const $ffi_name) -> Self {
                 debug_assert!($crate::types::instance_of::<Self>(ptr as *const _));
                 $name($crate::translate::from_glib_none(ptr as *mut _), ::std::marker::PhantomData)
@@ -568,6 +883,7 @@ macro_rules! glib_object_wrapper {
         impl $crate::translate::FromGlibPtrFull<*mut $ffi_name> for $name {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_full(ptr: *mut $ffi_name) -> Self {
                 debug_assert!($crate::types::instance_of::<Self>(ptr as *const _));
                 $name($crate::translate::from_glib_full(ptr as *mut _), ::std::marker::PhantomData)
@@ -578,6 +894,7 @@ macro_rules! glib_object_wrapper {
         impl $crate::translate::FromGlibPtrBorrow<*mut $ffi_name> for $name {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_borrow(ptr: *mut $ffi_name) -> Self {
                 debug_assert!($crate::types::instance_of::<Self>(ptr as *const _));
                 $name($crate::translate::from_glib_borrow(ptr as *mut _),
@@ -589,6 +906,7 @@ macro_rules! glib_object_wrapper {
         impl $crate::translate::FromGlibPtrBorrow<*const $ffi_name> for $name {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_borrow(ptr: *const $ffi_name) -> Self {
                 $crate::translate::from_glib_borrow(ptr as *mut $ffi_name)
             }
@@ -596,6 +914,7 @@ macro_rules! glib_object_wrapper {
 
         #[doc(hidden)]
         impl $crate::translate::FromGlibContainerAsVec<*mut $ffi_name, *mut *mut $ffi_name> for $name {
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_none_num_as_vec(ptr: *mut *mut $ffi_name, num: usize) -> Vec<Self> {
                 if num == 0 || ptr.is_null() {
                     return Vec::new();
@@ -608,12 +927,14 @@ macro_rules! glib_object_wrapper {
                 res
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_container_num_as_vec(ptr: *mut *mut $ffi_name, num: usize) -> Vec<Self> {
                 let res = $crate::translate::FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, num);
                 $crate::glib_sys::g_free(ptr as *mut _);
                 res
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_full_num_as_vec(ptr: *mut *mut $ffi_name, num: usize) -> Vec<Self> {
                 if num == 0 || ptr.is_null() {
                     return Vec::new();
@@ -630,14 +951,17 @@ macro_rules! glib_object_wrapper {
 
         #[doc(hidden)]
         impl $crate::translate::FromGlibPtrArrayContainerAsVec<*mut $ffi_name, *mut *mut $ffi_name> for $name {
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_none_as_vec(ptr: *mut *mut $ffi_name) -> Vec<Self> {
                 $crate::translate::FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr, $crate::translate::c_ptr_array_len(ptr))
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_container_as_vec(ptr: *mut *mut $ffi_name) -> Vec<Self> {
                 $crate::translate::FromGlibContainerAsVec::from_glib_container_num_as_vec(ptr, $crate::translate::c_ptr_array_len(ptr))
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_full_as_vec(ptr: *mut *mut $ffi_name) -> Vec<Self> {
                 $crate::translate::FromGlibContainerAsVec::from_glib_full_num_as_vec(ptr, $crate::translate::c_ptr_array_len(ptr))
             }
@@ -645,15 +969,18 @@ macro_rules! glib_object_wrapper {
 
         #[doc(hidden)]
         impl $crate::translate::FromGlibContainerAsVec<*mut $ffi_name, *const *mut $ffi_name> for $name {
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_none_num_as_vec(ptr: *const *mut $ffi_name, num: usize) -> Vec<Self> {
                 $crate::translate::FromGlibContainerAsVec::from_glib_none_num_as_vec(ptr as *mut *mut _, num)
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_container_num_as_vec(_: *const *mut $ffi_name, _: usize) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_full_num_as_vec(_: *const *mut $ffi_name, _: usize) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
@@ -662,15 +989,18 @@ macro_rules! glib_object_wrapper {
 
         #[doc(hidden)]
         impl $crate::translate::FromGlibPtrArrayContainerAsVec<*mut $ffi_name, *const *mut $ffi_name> for $name {
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_none_as_vec(ptr: *const *mut $ffi_name) -> Vec<Self> {
                 $crate::translate::FromGlibPtrArrayContainerAsVec::from_glib_none_as_vec(ptr as *mut *mut _)
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_container_as_vec(_: *const *mut $ffi_name) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
             }
 
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_glib_full_as_vec(_: *const *mut $ffi_name) -> Vec<Self> {
                 // Can't free a *const
                 unimplemented!()
@@ -704,22 +1034,31 @@ macro_rules! glib_object_wrapper {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                 f.debug_struct(stringify!($name))
                     .field("inner", &self.0)
-                    .field("type", &<$name as $crate::ObjectExt>::get_type(self))
                     .finish()
             }
         }
 
         #[doc(hidden)]
         impl<'a> $crate::value::FromValueOptional<'a> for $name {
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn from_value_optional(value: &$crate::Value) -> Option<Self> {
-                Option::<$name>::from_glib_full($crate::gobject_sys::g_value_dup_object($crate::translate::ToGlibPtr::to_glib_none(value).0) as *mut $ffi_name)
-                    .map(|o| $crate::object::Cast::unsafe_cast(o))
+                let obj = $crate::gobject_sys::g_value_get_object($crate::translate::ToGlibPtr::to_glib_none(value).0);
+
+                // Attention: Don't use from_glib_none() here because we don't want to steal any
+                // floating references that might be owned by someone else.
+                if !obj.is_null() {
+                    $crate::gobject_sys::g_object_ref(obj);
+                }
+
+                // And take the reference to the object from above to pass it to the caller
+                Option::<$name>::from_glib_full(obj as *mut $ffi_name).map(|o| $crate::object::Cast::unsafe_cast(o))
             }
         }
 
         #[doc(hidden)]
         impl $crate::value::SetValue for $name {
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn set_value(value: &mut $crate::Value, this: &Self) {
                 $crate::gobject_sys::g_value_set_object($crate::translate::ToGlibPtrMut::to_glib_none_mut(value).0, $crate::translate::ToGlibPtr::<*mut $ffi_name>::to_glib_none(this).0 as *mut $crate::gobject_sys::GObject)
             }
@@ -728,10 +1067,13 @@ macro_rules! glib_object_wrapper {
         #[doc(hidden)]
         impl $crate::value::SetValueOptional for $name {
             #[allow(clippy::cast_ptr_alignment)]
+            #[allow(clippy::missing_safety_doc)]
             unsafe fn set_value_optional(value: &mut $crate::Value, this: Option<&Self>) {
                 $crate::gobject_sys::g_value_set_object($crate::translate::ToGlibPtrMut::to_glib_none_mut(value).0, $crate::translate::ToGlibPtr::<*mut $ffi_name>::to_glib_none(&this).0 as *mut $crate::gobject_sys::GObject)
             }
         }
+
+        $crate::glib_weak_impl!($name);
     };
 
     (@munch_impls $name:ident, ) => { };
@@ -902,6 +1244,7 @@ impl Object {
             if ptr.is_null() {
                 Err(glib_bool_error!("Can't instantiate object"))
             } else if type_.is_a(&InitiallyUnowned::static_type()) {
+                // Attention: This takes ownership of the floating reference
                 Ok(from_glib_none(ptr))
             } else {
                 Ok(from_glib_full(ptr))
@@ -945,6 +1288,15 @@ pub trait ObjectExt: ObjectType {
     where
         N: Into<&'a str>,
         F: Fn(&[Value]) -> Option<Value> + Send + Sync + 'static;
+    fn connect_local<'a, N, F>(
+        &self,
+        signal_name: N,
+        after: bool,
+        callback: F,
+    ) -> Result<SignalHandlerId, BoolError>
+    where
+        N: Into<&'a str>,
+        F: Fn(&[Value]) -> Option<Value> + 'static;
     unsafe fn connect_unsafe<'a, N, F>(
         &self,
         signal_name: N,
@@ -1039,22 +1391,33 @@ impl<T: ObjectType> ObjectExt for T {
             // a properly type Value. This can happen if the type field in the
             // Value is set to a more generic type than the contained value
             if !valid_type && property_value.type_().is_a(&Object::static_type()) {
-                if let Some(obj) = property_value.get::<Object>() {
-                    if obj.get_type().is_a(&pspec.get_value_type()) {
-                        property_value.0.g_type = pspec.get_value_type().to_glib();
-                    } else {
-                        return Err(glib_bool_error!(
-                            "property can't be set from the given object type"
-                        ));
+                match property_value.get::<Object>() {
+                    Ok(Some(obj)) => {
+                        if obj.get_type().is_a(&pspec.get_value_type()) {
+                            property_value.0.g_type = pspec.get_value_type().to_glib();
+                        } else {
+                            return Err(glib_bool_error!(format!(
+                                concat!(
+                                    "property can't be set from the given object type ",
+                                    "(expected: {:?}, got: {:?})",
+                                ),
+                                pspec.get_value_type(),
+                                obj.get_type(),
+                            )));
+                        }
                     }
-                } else {
-                    // Otherwise if the value is None then the type is compatible too
-                    property_value.0.g_type = pspec.get_value_type().to_glib();
+                    Ok(None) => {
+                        // If the value is None then the type is compatible too
+                        property_value.0.g_type = pspec.get_value_type().to_glib();
+                    }
+                    Err(_) => unreachable!("property_value type conformity already checked"),
                 }
             } else if !valid_type {
-                return Err(glib_bool_error!(
-                    "property can't be set from the given type"
-                ));
+                return Err(glib_bool_error!(format!(
+                    "property can't be set from the given type (expected: {:?}, got: {:?})",
+                    pspec.get_value_type(),
+                    property_value.type_(),
+                )));
             }
 
             let changed: bool = from_glib(gobject_sys::g_param_value_validate(
@@ -1240,6 +1603,25 @@ impl<T: ObjectType> ObjectExt for T {
         unsafe { self.connect_unsafe(signal_name, after, callback) }
     }
 
+    fn connect_local<'a, N, F>(
+        &self,
+        signal_name: N,
+        after: bool,
+        callback: F,
+    ) -> Result<SignalHandlerId, BoolError>
+    where
+        N: Into<&'a str>,
+        F: Fn(&[Value]) -> Option<Value> + 'static,
+    {
+        let callback = crate::ThreadGuard::new(callback);
+
+        unsafe {
+            self.connect_unsafe(signal_name, after, move |values| {
+                (callback.get_ref())(values)
+            })
+        }
+    }
+
     unsafe fn connect_unsafe<'a, N, F>(
         &self,
         signal_name: N,
@@ -1269,8 +1651,9 @@ impl<T: ObjectType> ObjectExt for T {
             return Err(glib_bool_error!("Signal not found"));
         }
 
-        let mut details = mem::zeroed();
-        gobject_sys::g_signal_query(signal_id, &mut details);
+        let mut details = mem::MaybeUninit::zeroed();
+        gobject_sys::g_signal_query(signal_id, details.as_mut_ptr());
+        let details = details.assume_init();
         if details.signal_id != signal_id {
             return Err(glib_bool_error!("Signal not found"));
         }
@@ -1302,16 +1685,20 @@ impl<T: ObjectType> ObjectExt for T {
                         // a properly typed Value. This can happen if the type field in the
                         // Value is set to a more generic type than the contained value
                         if !valid_type && ret.type_().is_a(&Object::static_type()) {
-                            if let Some(obj) = ret.get::<Object>() {
-                                if obj.get_type().is_a(&return_type) {
-                                    ret.0.g_type = return_type.to_glib();
-                                } else {
-                                    panic!("Signal required return value of type {} but got {} (actual {})",
-                                       return_type.name(), ret.type_().name(), obj.get_type().name());
+                            match ret.get::<Object>() {
+                                Ok(Some(obj)) => {
+                                    if obj.get_type().is_a(&return_type) {
+                                        ret.0.g_type = return_type.to_glib();
+                                    } else {
+                                        panic!("Signal required return value of type {} but got {} (actual {})",
+                                           return_type.name(), ret.type_().name(), obj.get_type().name());
+                                    }
                                 }
-                            } else {
-                                // Otherwise if the value is None then the type is compatible too
-                                ret.0.g_type = return_type.to_glib();
+                                Ok(None) => {
+                                    // If the value is None then the type is compatible too
+                                    ret.0.g_type = return_type.to_glib();
+                                }
+                                Err(_) => unreachable!("ret type conformity already checked"),
                             }
                         } else if !valid_type {
                             panic!(
@@ -1370,8 +1757,9 @@ impl<T: ObjectType> ObjectExt for T {
                 return Err(glib_bool_error!("Signal not found"));
             }
 
-            let mut details = mem::zeroed();
-            gobject_sys::g_signal_query(signal_id, &mut details);
+            let mut details = mem::MaybeUninit::zeroed();
+            gobject_sys::g_signal_query(signal_id, details.as_mut_ptr());
+            let details = details.assume_init();
             if details.signal_id != signal_id {
                 return Err(glib_bool_error!("Signal not found"));
             }
@@ -1436,7 +1824,7 @@ impl<T: ObjectType> ObjectExt for T {
 
     fn downgrade(&self) -> WeakRef<T> {
         unsafe {
-            let w = WeakRef(Box::new(mem::uninitialized()), PhantomData);
+            let w = WeakRef(Box::new(mem::zeroed()), PhantomData);
             gobject_sys::g_weak_ref_init(
                 mut_override(&*w.0),
                 self.as_object_ref().to_glib_none().0,
@@ -1530,7 +1918,7 @@ pub struct WeakRef<T: ObjectType>(Box<gobject_sys::GWeakRef>, PhantomData<*const
 impl<T: ObjectType> WeakRef<T> {
     pub fn new() -> WeakRef<T> {
         unsafe {
-            let w = WeakRef(Box::new(mem::uninitialized()), PhantomData);
+            let w = WeakRef(Box::new(mem::zeroed()), PhantomData);
             gobject_sys::g_weak_ref_init(mut_override(&*w.0), ptr::null_mut());
             w
         }
@@ -1560,7 +1948,7 @@ impl<T: ObjectType> Drop for WeakRef<T> {
 impl<T: ObjectType> Clone for WeakRef<T> {
     fn clone(&self) -> Self {
         unsafe {
-            let c = WeakRef(Box::new(mem::uninitialized()), PhantomData);
+            let c = WeakRef(Box::new(mem::zeroed()), PhantomData);
 
             let o = gobject_sys::g_weak_ref_get(mut_override(&*self.0));
             gobject_sys::g_weak_ref_init(mut_override(&*c.0), o);
@@ -1671,7 +2059,15 @@ impl<'a> BindingBuilder<'a> {
     ) -> ::Closure {
         ::Closure::new(move |values| {
             assert_eq!(values.len(), 3);
-            let binding = values[0].get::<::Binding>().unwrap();
+            let binding = values[0].get::<::Binding>().unwrap_or_else(|_| {
+                panic!(
+                    "Type mismatch with the first argument in the closure: expected: `Binding`, got: {:?}",
+                    values[0].type_(),
+                )
+            })
+            .unwrap_or_else(|| {
+                panic!("Found `None` for the first argument in the closure, expected `Some`")
+            });
             let from = unsafe {
                 let ptr = gobject_sys::g_value_get_boxed(mut_override(
                     &values[1] as *const Value as *const gobject_sys::GValue,

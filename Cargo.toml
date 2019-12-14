@@ -24,9 +24,14 @@ name = "glib"
 lazy_static = "1.2"
 libc = "0.2"
 bitflags = "1.0"
-gobject-sys = "0.9.0"
-glib-sys = "0.9.0"
 futures-preview = { version = "0.3.0-alpha", optional = true }
+futures-core = "0.3"
+futures-task = "0.3"
+futures-executor = "0.3"
+futures-util = "0.3"
+futures-channel = "0.3"
+glib-sys = "0.9.0"
+gobject-sys = "0.9.0"
 
 [dev-dependencies]
 tempfile = "3"
@@ -40,6 +45,8 @@ v2_52 = ["v2_50", "glib-sys/v2_52"]
 v2_54 = ["v2_52", "glib-sys/v2_54", "gobject-sys/v2_54"]
 v2_56 = ["v2_54", "glib-sys/v2_56"]
 v2_58 = ["v2_56", "glib-sys/v2_58"]
-futures = ["futures-preview"]
-subclassing = []
+v2_60 = ["v2_58", "glib-sys/v2_60"]
 dox = ["glib-sys/dox", "gobject-sys/dox"]
+
+[package.metadata.docs.rs]
+features = ["dox"]

@@ -131,13 +131,13 @@ impl KeyFile {
 
     pub fn get_boolean_list(&self, group_name: &str, key: &str) -> Result<Vec<bool>, Error> {
         unsafe {
-            let mut length = mem::uninitialized();
+            let mut length = mem::MaybeUninit::uninit();
             let mut error = ptr::null_mut();
             let ret = glib_sys::g_key_file_get_boolean_list(
                 self.to_glib_none().0,
                 group_name.to_glib_none().0,
                 key.to_glib_none().0,
-                &mut length,
+                length.as_mut_ptr(),
                 &mut error,
             );
             if !error.is_null() {
@@ -145,8 +145,110 @@ impl KeyFile {
             }
             Ok(FromGlibContainer::from_glib_container_num(
                 ret,
-                length as usize,
+                length.assume_init() as usize,
             ))
+        }
+    }
+
+    pub fn get_string(&self, group_name: &str, key: &str) -> Result<GString, Error> {
+        unsafe {
+            let mut error = ptr::null_mut();
+            let ret = glib_sys::g_key_file_get_string(
+                self.to_glib_none().0,
+                group_name.to_glib_none().0,
+                key.to_glib_none().0,
+                &mut error,
+            );
+            if error.is_null() {
+                Ok(from_glib_full(ret))
+            } else {
+                if !ret.is_null() {
+                    glib_sys::g_free(ret as *mut _);
+                }
+                Err(from_glib_full(error))
+            }
+        }
+    }
+
+    pub fn get_string_list(&self, group_name: &str, key: &str) -> Result<Vec<GString>, Error> {
+        unsafe {
+            let mut length = mem::MaybeUninit::uninit();
+            let mut error = ptr::null_mut();
+            let ret = glib_sys::g_key_file_get_string_list(
+                self.to_glib_none().0,
+                group_name.to_glib_none().0,
+                key.to_glib_none().0,
+                length.as_mut_ptr(),
+                &mut error,
+            );
+            if error.is_null() {
+                Ok(FromGlibContainer::from_glib_full_num(
+                    ret,
+                    length.assume_init() as usize,
+                ))
+            } else {
+                if !ret.is_null() {
+                    glib_sys::g_strfreev(ret);
+                }
+                Err(from_glib_full(error))
+            }
+        }
+    }
+
+    pub fn get_locale_string(
+        &self,
+        group_name: &str,
+        key: &str,
+        locale: Option<&str>,
+    ) -> Result<GString, Error> {
+        unsafe {
+            let mut error = ptr::null_mut();
+            let ret = glib_sys::g_key_file_get_locale_string(
+                self.to_glib_none().0,
+                group_name.to_glib_none().0,
+                key.to_glib_none().0,
+                locale.to_glib_none().0,
+                &mut error,
+            );
+            if error.is_null() {
+                Ok(from_glib_full(ret))
+            } else {
+                if !ret.is_null() {
+                    glib_sys::g_free(ret as *mut _);
+                }
+                Err(from_glib_full(error))
+            }
+        }
+    }
+
+    pub fn get_locale_string_list(
+        &self,
+        group_name: &str,
+        key: &str,
+        locale: Option<&str>,
+    ) -> Result<Vec<GString>, Error> {
+        unsafe {
+            let mut length = mem::MaybeUninit::uninit();
+            let mut error = ptr::null_mut();
+            let ret = glib_sys::g_key_file_get_locale_string_list(
+                self.to_glib_none().0,
+                group_name.to_glib_none().0,
+                key.to_glib_none().0,
+                locale.to_glib_none().0,
+                length.as_mut_ptr(),
+                &mut error,
+            );
+            if error.is_null() {
+                Ok(FromGlibContainer::from_glib_full_num(
+                    ret,
+                    length.assume_init() as usize,
+                ))
+            } else {
+                if !ret.is_null() {
+                    glib_sys::g_strfreev(ret);
+                }
+                Err(from_glib_full(error))
+            }
         }
     }
 }

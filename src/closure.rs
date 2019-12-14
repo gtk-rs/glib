@@ -35,6 +35,12 @@ impl Closure {
         unsafe { Closure::new_unsafe(callback) }
     }
 
+    pub fn new_local<F: Fn(&[Value]) -> Option<Value> + 'static>(callback: F) -> Self {
+        let callback = crate::ThreadGuard::new(callback);
+
+        unsafe { Closure::new_unsafe(move |values| (callback.get_ref())(values)) }
+    }
+
     pub unsafe fn new_unsafe<F: Fn(&[Value]) -> Option<Value>>(callback: F) -> Self {
         unsafe extern "C" fn marshal<F>(
             _closure: *mut gobject_sys::GClosure,
@@ -135,10 +141,10 @@ mod tests {
 
     fn closure_fn(values: &[Value]) -> Option<Value> {
         assert_eq!(values.len(), 2);
-        let string: Option<String> = values[0].get();
-        assert_eq!(string, Some("test".to_string()));
-        let int: Option<i32> = values[1].get();
-        assert_eq!(int, Some(42));
+        let string_arg = values[0].get::<String>();
+        assert_eq!(string_arg, Ok(Some("test".to_string())));
+        let int_arg = values[1].get_some::<i32>();
+        assert_eq!(int_arg, Ok(42));
         Some(24.to_value())
     }
 
@@ -150,10 +156,10 @@ mod tests {
         let closure = Closure::new(move |values| {
             count.fetch_add(1, Ordering::Relaxed);
             assert_eq!(values.len(), 2);
-            let string: Option<String> = values[0].get();
-            assert_eq!(string, Some("test".to_string()));
-            let int: Option<i32> = values[1].get();
-            assert_eq!(int, Some(42));
+            let string_arg = values[0].get::<String>();
+            assert_eq!(string_arg, Ok(Some("test".to_string())));
+            let int_arg = values[1].get_some::<i32>();
+            assert_eq!(int_arg, Ok(42));
             None
         });
         let result = closure.invoke(&[&"test".to_string(), &42]);
@@ -166,7 +172,7 @@ mod tests {
 
         let closure = Closure::new(closure_fn);
         let result = closure.invoke(&[&"test".to_string(), &42]);
-        let int: Option<i32> = result.and_then(|result| result.get());
-        assert_eq!(int, Some(24));
+        let int_res = result.map(|result| result.get_some::<i32>());
+        assert_eq!(int_res, Some(Ok(24)));
     }
 }
