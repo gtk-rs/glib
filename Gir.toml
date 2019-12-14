@@ -339,6 +339,14 @@ status = "generate"
     pattern = "ref_string_.+"
     #need manual implementation
     ignore = true
+    [[object.function]]
+    name = "spawn_async_with_fds"
+    # generates invalid FDs
+    ignore = true
+    [[object.function]]
+    name = "spawn_async_with_pipes"
+    # generates invalid FDs
+    ignore = true
     [[object.constant]]
     pattern = "DIR_SEPARATOR(_S)?"
     #not cross-platform
@@ -446,6 +454,22 @@ status = "generate"
        [[object.function]]
        name = "get_boolean_list"
        #boolean array needs to be converted to Vec<bool>
+       ignore = true
+       [[object.function]]
+       name = "get_string"
+       # can return an error but still a value to be freed
+       ignore = true
+       [[object.function]]
+       name = "get_string_list"
+       # can return an error but still a value to be freed
+       ignore = true
+       [[object.function]]
+       name = "get_locale_string"
+       # can return an error but still a value to be freed
+       ignore = true
+       [[object.function]]
+       name = "get_locale_string_list"
+       # can return an error but still a value to be freed
        ignore = true
 
 [[object]]

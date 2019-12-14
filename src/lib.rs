@@ -57,8 +57,7 @@
 //! `ObjectExt` and `gtk::WidgetExt`), which are blanketly implemented for all
 //! their subtypes.
 //!
-//! For creating new subclasses of `Object` or other object types this crate has to be compiled
-//! with the `subclassing` feature to enable the [`subclass`](subclass/index.html) module. Check
+//! You can create new subclasses of `Object` or other object types. Look at
 //! the module's documentation for further details and a code example.
 //!
 //! # Under the hood
@@ -89,8 +88,11 @@ pub extern crate glib_sys;
 #[doc(hidden)]
 pub extern crate gobject_sys;
 
-#[cfg(feature = "futures")]
-pub extern crate futures;
+extern crate futures_channel;
+extern crate futures_core;
+extern crate futures_executor;
+extern crate futures_task;
+extern crate futures_util;
 
 pub use byte_array::ByteArray;
 pub use bytes::Bytes;
@@ -115,6 +117,8 @@ pub use value::{SendValue, ToSendValue, ToValue, TypedValue, Value};
 pub use variant::{StaticVariantType, ToVariant, Variant};
 pub use variant_type::{VariantTy, VariantType};
 
+#[macro_use]
+pub mod clone;
 #[macro_use]
 pub mod wrapper;
 #[macro_use]
@@ -146,6 +150,8 @@ mod checksum;
 pub mod closure;
 mod enums;
 mod file_error;
+mod functions;
+pub use functions::*;
 mod key_file;
 pub mod prelude;
 pub mod signal;
@@ -177,11 +183,11 @@ pub use quark::Quark;
 pub mod send_unique;
 pub use send_unique::{SendUnique, SendUniqueCell};
 
-#[cfg(feature = "futures")]
+#[macro_use]
+pub mod subclass;
+
 mod main_context_futures;
-#[cfg(feature = "futures")]
 mod source_futures;
-#[cfg(feature = "futures")]
 pub use source_futures::*;
 
 // Actual thread IDs can be reused by the OS once the old thread finished.
@@ -199,6 +205,42 @@ pub(crate) fn get_thread_id() -> usize {
     THREAD_ID.with(|&x| x)
 }
 
-#[macro_use]
-#[cfg(any(feature = "dox", feature = "subclassing"))]
-pub mod subclass;
+pub(crate) struct ThreadGuard<T> {
+    thread_id: usize,
+    value: T,
+}
+
+impl<T> ThreadGuard<T> {
+    pub(crate) fn new(value: T) -> Self {
+        Self {
+            thread_id: get_thread_id(),
+            value,
+        }
+    }
+
+    pub(crate) fn get_ref(&self) -> &T {
+        if self.thread_id != get_thread_id() {
+            panic!("Value accessed from different thread than where it was created");
+        }
+
+        &self.value
+    }
+
+    pub(crate) fn get_mut(&mut self) -> &mut T {
+        if self.thread_id != get_thread_id() {
+            panic!("Value accessed from different thread than where it was created");
+        }
+
+        &mut self.value
+    }
+}
+
+impl<T> Drop for ThreadGuard<T> {
+    fn drop(&mut self) {
+        if self.thread_id != get_thread_id() {
+            panic!("Value dropped on a different thread than where it was created");
+        }
+    }
+}
+
+unsafe impl<T> Send for ThreadGuard<T> {}
