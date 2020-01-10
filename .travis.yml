@@ -86,6 +86,6 @@ script:
   - rustc --version
   - mkdir .cargo
   - echo 'paths = ["."]' > .cargo/config
-  - git clone -q --depth 50 -b pending https://github.com/gtk-rs/examples _examples
+  - git clone -q --depth 50 -b master https://github.com/gtk-rs/examples _examples
   - cd _examples
   - ./build_travis.sh
