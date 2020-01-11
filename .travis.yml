@@ -63,6 +63,7 @@ addons:
     - libmount-dev
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew unlink python@2; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install gtk+3 cairo atk; fi
   - if [[ "$ARM" == "1" ]]; then rustup target add armv7-unknown-linux-gnueabihf; fi
 script:
@@ -86,6 +87,6 @@ script:
   - rustc --version
   - mkdir .cargo
   - echo 'paths = ["."]' > .cargo/config
-  - git clone -q --depth 50 -b pending https://github.com/gtk-rs/examples _examples
+  - git clone -q --depth 50 -b master https://github.com/gtk-rs/examples _examples
   - cd _examples
   - ./build_travis.sh
