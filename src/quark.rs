@@ -16,6 +16,10 @@ impl Quark {
         unsafe { from_glib(glib_sys::g_quark_from_static_string(s.to_glib_full())) }
     }
 
+    pub fn from_static_string(s: &'static str) -> Quark {
+        unsafe { from_glib(glib_sys::g_quark_from_static_string(s.to_glib_full())) }
+    }
+
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn to_string(&self) -> &'static str {
         unsafe {
