@@ -9,6 +9,7 @@ version = "0.9.3"
 keywords = ["glib", "gtk-rs", "gnome", "GUI"]
 repository = "https://github.com/gtk-rs/glib"
 license = "MIT"
+build = "build.rs"
 exclude = [
     "gir-files/*",
 ]
@@ -47,6 +48,13 @@ v2_56 = ["v2_54", "glib-sys/v2_56"]
 v2_58 = ["v2_56", "glib-sys/v2_58"]
 v2_60 = ["v2_58", "glib-sys/v2_60"]
 dox = ["glib-sys/dox", "gobject-sys/dox"]
+purge-lgpl-docs = ["gtk-rs-lgpl-docs"]
+embed-lgpl-docs = ["gtk-rs-lgpl-docs"]
 
 [package.metadata.docs.rs]
-features = ["dox"]
+features = ["dox", "embed-lgpl-docs"]
+
+[build-dependencies.gtk-rs-lgpl-docs]
+version = "0.1.3"
+optional = true
+git = "https://github.com/gtk-rs/lgpl-docs"
