@@ -83,13 +83,18 @@ script:
     make regen_check;
     fi
   - if ! [ "$ARM" == "1" ]; then
-    cargo doc --features "dox";
+    cargo doc --features "dox,embed-lgpl-docs";
     fi
   - if ! [ "$ARM" == "1" ]; then
     cargo test --features "$FEATURES";
     fi
   - if [ "$ARM" == "1" ]; then
     PKG_CONFIG_ALLOW_CROSS=1 cargo build --features "$FEATURES" $OTHER_TARGET;
+    fi
+  - if ! [ "$ARM" == "1" ]; then
+    cargo build --features "$FEATURES,embed-lgpl-docs";
+    cargo build --features "$FEATURES,purge-lgpl-docs";
+    git diff -R --exit-code;
     fi
   - rustc --version
   - python3 clone_tests/clone_compilation_errors.py
