@@ -6,6 +6,7 @@
 
 use glib_sys;
 use gobject_sys;
+use std::any::Any;
 use std::cmp;
 use std::fmt;
 use std::hash;
@@ -13,6 +14,7 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops;
 use std::ptr;
+use quark::Quark;
 use translate::*;
 use types::StaticType;
 
@@ -1291,6 +1293,10 @@ pub trait ObjectExt: ObjectType {
     fn find_property<'a, N: Into<&'a str>>(&self, property_name: N) -> Option<::ParamSpec>;
     fn list_properties(&self) -> Vec<::ParamSpec>;
 
+    fn set_qdata(&self, key: Quark, value: Box<dyn Any + Send + Sync>);
+    fn get_qdata(&self, key: Quark) -> Option<&(dyn Any + Send + Sync)>;
+    fn steal_qdata(&self, key: Quark) -> Option<Box<dyn Any + Send + Sync>>;
+
     fn block_signal(&self, handler_id: &SignalHandlerId);
     fn unblock_signal(&self, handler_id: &SignalHandlerId);
     fn stop_signal_emission(&self, signal_name: &str);
@@ -1487,6 +1493,55 @@ impl<T: ObjectType> ObjectExt for T {
             } else {
                 Ok(value)
             }
+        }
+    }
+
+    fn set_qdata(&self, key: Quark, value: Box<dyn Any + Send + Sync>) {
+        unsafe extern "C" fn drop_value(ptr: glib_sys::gpointer) {
+            debug_assert!(!ptr.is_null());
+            let value: Box<dyn Any> = Box::from_raw(ptr as *mut dyn Any);
+            drop(value)
+        }
+
+        let ptr = Box::into_raw(Box::new(value)) as glib_sys::gpointer;
+        unsafe {
+            gobject_sys::g_object_set_qdata_full(
+                self.as_object_ref().to_glib_none().0,
+                key.to_glib(),
+                ptr,
+                Some(drop_value),
+            );
+        }
+    }
+
+    fn get_qdata(&self, key: Quark) -> Option<&(dyn Any + Send + Sync)> {
+        unsafe {
+            let ptr = gobject_sys::g_object_get_qdata(
+                self.as_object_ref().to_glib_none().0,
+                key.to_glib(),
+            );
+            if ptr.is_null() {
+                None
+            } else {
+                Some(&*(ptr as *const Box<dyn Any + Send + Sync>))
+            }
+        }
+    }
+
+    fn steal_qdata(&self, key: Quark) -> Option<Box<dyn Any + Send + Sync>> {
+        let ptr = unsafe {
+            gobject_sys::g_object_steal_qdata(
+                self.as_object_ref().to_glib_none().0,
+                key.to_glib(),
+            )
+        };
+        if ptr.is_null() {
+            None
+        } else {
+            let value: Box<Box<dyn Any + Send + Sync>> = unsafe {
+                Box::from_raw(ptr as *mut Box<dyn Any + Send + Sync>)
+            };
+            Some(value)
         }
     }
 
