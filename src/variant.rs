@@ -111,8 +111,8 @@ impl Variant {
 
     /// Returns `true` if the type of the value corresponds to `T`.
     #[inline]
-    pub fn is<T: StaticVariantType>(&self) -> bool {
-        self.type_() == T::static_variant_type()
+    pub fn is<T: DynamicVariantType>(&self) -> bool {
+        self.type_() == T::variant_type()
     }
 
     /// Tries to extract a value of type `T`.
@@ -145,10 +145,10 @@ impl Variant {
     }
 
     /// Constructs a new serialised-mode GVariant instance.
-    pub fn new_from_bytes<T: StaticVariantType>(bytes: &Bytes) -> Self {
+    pub fn new_from_bytes<T: DynamicVariantType>(bytes: &Bytes) -> Self {
         unsafe {
             from_glib_none(glib_sys::g_variant_new_from_bytes(
-                T::static_variant_type().as_ptr() as *const _,
+                T::variant_type().as_ptr() as *const _,
                 bytes.to_glib_none().0,
                 false.to_glib(),
             ))
@@ -167,9 +167,9 @@ impl Variant {
     /// Since the data is not validated, this is potentially dangerous if called
     /// on bytes which are not guaranteed to have come from serialising another
     /// Variant.  The caller is responsible for ensuring bad data is not passed in.
-    pub unsafe fn new_from_bytes_trusted<T: StaticVariantType>(bytes: &Bytes) -> Self {
+    pub unsafe fn new_from_bytes_trusted<T: DynamicVariantType>(bytes: &Bytes) -> Self {
         from_glib_none(glib_sys::g_variant_new_from_bytes(
-            T::static_variant_type().as_ptr() as *const _,
+            T::variant_type().as_ptr() as *const _,
             bytes.to_glib_none().0,
             true.to_glib(),
         ))
@@ -255,7 +255,7 @@ pub trait ToVariant {
 }
 
 /// Extracts a value.
-pub trait FromVariant: Sized + StaticVariantType {
+pub trait FromVariant: Sized + DynamicVariantType {
     /// Tries to extract a value.
     ///
     /// Returns `Some` if the variant's type matches `Self`.
