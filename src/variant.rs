@@ -54,6 +54,7 @@ use StaticType;
 use Type;
 use Value;
 use VariantTy;
+use VariantType;
 
 glib_wrapper! {
     /// A generic immutable value capable of carrying various types.
@@ -378,6 +379,90 @@ impl<T: ToVariant> From<T> for Variant {
     }
 }
 
+/// Returns `VariantType` of `Self`.
+pub trait DynamicVariantType {
+    /// Returns the `VariantType` corresponding to `self`.
+    fn variant_type() -> VariantType;
+}
+
+impl<T: ?Sized + StaticVariantType> DynamicVariantType for T {
+    fn variant_type() -> VariantType {
+        T::static_variant_type().into_owned().to_owned()
+    }
+}
+
+impl<T: DynamicVariantType> DynamicVariantType for [T] {
+    fn variant_type() -> VariantType {
+        let child_type = T::variant_type();
+        let signature = format!("a{}", child_type.to_str());
+
+        VariantType::new(&signature).expect("incorrect signature")
+    }
+}
+
+impl<T: DynamicVariantType> DynamicVariantType for Vec<T> {
+    fn variant_type() -> VariantType {
+        <[T]>::variant_type()
+    }
+}
+
+macro_rules! map_impls {
+    ($name:ident) => {
+        impl<K: StaticVariantType, V: DynamicVariantType> DynamicVariantType for std::collections::$name<K, V> {
+            fn variant_type() -> VariantType {
+                let key_type = K::static_variant_type();
+                let value_type = V::variant_type();
+                let signature = format!("a{{{}{}}}", key_type.to_str(), value_type.to_str());
+
+                VariantType::new(&signature).expect("incorrect signature")
+            }
+        }
+    }
+}
+map_impls!(HashMap);
+map_impls!(HashSet);
+
+macro_rules! tuple_impls {
+    ($($len:expr => ($($n:tt $name:ident)+))+) => {
+        $(
+            impl<$($name),+> DynamicVariantType for ($($name,)+)
+            where
+                $($name: DynamicVariantType,)+
+            {
+                fn variant_type() -> VariantType {
+                    let mut signature = String::with_capacity(255);
+                    signature.push('(');
+                    $(
+                        signature.push_str($name::variant_type().to_str());
+                    )+
+                    signature.push(')');
+
+                    VariantType::new(&signature).expect("incorrect signature")
+                }
+            }
+        )+
+    }
+}
+
+tuple_impls! {
+    1 => (0 T0)
+    2 => (0 T0 1 T1)
+    3 => (0 T0 1 T1 2 T2)
+    4 => (0 T0 1 T1 2 T2 3 T3)
+    5 => (0 T0 1 T1 2 T2 3 T3 4 T4)
+    6 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5)
+    7 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6)
+    8 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7)
+    9 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8)
+    10 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9)
+    11 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10)
+    12 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11)
+    13 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12)
+    14 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13)
+    15 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14)
+    16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14 15 T15)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +538,14 @@ mod tests {
         set.insert(v1);
         assert!(set.contains(&v2));
         assert!(!set.contains(&v3));
+
+        assert_eq!(<HashSet<&str,(&str,u8,u32)>>::variant_type().to_str(), "a{s(syu)}");
+    }
+
+    #[test]
+    fn test_array() {
+        // Test just the signature for now.
+        assert_eq!(<Vec<&str>>::variant_type().to_str(), "as");
+        assert_eq!(<Vec<(&str,u8,u32)>>::variant_type().to_str(), "a(syu)");
     }
 }
