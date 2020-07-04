@@ -72,9 +72,9 @@ pub unsafe trait InstanceStruct: Sized + 'static {
             let private_offset = data.as_ref().private_offset;
             let ptr: *const u8 = self as *const _ as *const u8;
             let priv_ptr = ptr.offset(private_offset);
-            let imp = priv_ptr as *const Option<Self::Type>;
+            let imp = priv_ptr as *const Self::Type;
 
-            (*imp).as_ref().expect("No private struct")
+            &*imp
         }
     }
 
@@ -125,6 +125,11 @@ pub unsafe trait IsSubclassable<T: ObjectSubclass>: IsClassFor {
 /// Trait for implementable interfaces.
 pub unsafe trait IsImplementable<T: ObjectSubclass>: StaticType {
     /// Initializes the interface's virtual methods.
+    ///
+    /// # Safety
+    ///
+    /// It is the responsibility of the implementor of the interface to
+    /// correctly type the pointers when working on the vtables they point at.
     unsafe extern "C" fn interface_init(iface: glib_sys::gpointer, _iface_data: glib_sys::gpointer);
 }
 
@@ -309,7 +314,7 @@ pub trait ObjectSubclass: ObjectImpl + Sized + 'static {
     /// Returns the implementation from an instance.
     ///
     /// Panics if called on an object of the wrong type.
-    fn from_instance<T: IsA<Self::ParentType>>(obj: &T) -> &Self {
+    fn from_instance<T: IsA<::Object>>(obj: &T) -> &Self {
         unsafe {
             let data = Self::type_data();
             let type_ = data.as_ref().get_type();
@@ -347,7 +352,7 @@ pub trait ObjectSubclass: ObjectImpl + Sized + 'static {
     /// are initialized, and should return a new instance of the subclass
     /// private struct.
     ///
-    /// Optional, either implement this or `new_with_class()`.
+    /// Optional, either implement this or `with_class()`.
     fn new() -> Self {
         unimplemented!();
     }
@@ -362,7 +367,7 @@ pub trait ObjectSubclass: ObjectImpl + Sized + 'static {
     /// to itself for providing additional context.
     ///
     /// Optional, either implement this or `new()`.
-    fn new_with_class(_klass: &Self::Class) -> Self {
+    fn with_class(_klass: &Self::Class) -> Self {
         Self::new()
     }
 }
@@ -377,7 +382,7 @@ unsafe extern "C" fn class_init<T: ObjectSubclass>(
 
     // We have to update the private struct offset once the class is actually
     // being initialized.
-    {
+    if mem::size_of::<T>() != 0 {
         let mut private_offset = data.as_ref().private_offset as i32;
         gobject_sys::g_type_class_adjust_private_offset(klass, &mut private_offset);
         (*data.as_mut()).private_offset = private_offset as isize;
@@ -417,26 +422,23 @@ unsafe extern "C" fn instance_init<T: ObjectSubclass>(
     let private_offset = (*data.as_mut()).private_offset;
     let ptr: *mut u8 = obj as *mut _ as *mut u8;
     let priv_ptr = ptr.offset(private_offset);
-    let imp_storage = priv_ptr as *mut Option<T>;
+    let imp_storage = priv_ptr as *mut T;
 
     let klass = &*(klass as *const T::Class);
 
-    let imp = T::new_with_class(klass);
+    let imp = T::with_class(klass);
 
-    ptr::write(imp_storage, Some(imp));
+    ptr::write(imp_storage, imp);
 }
 
 unsafe extern "C" fn finalize<T: ObjectSubclass>(obj: *mut gobject_sys::GObject) {
-    // Retrieve the private struct, take it out of its storage and
-    // drop it for freeing all associated memory.
+    // Retrieve the private struct and drop it for freeing all associated memory.
     let mut data = T::type_data();
     let private_offset = (*data.as_mut()).private_offset;
     let ptr: *mut u8 = obj as *mut _ as *mut u8;
     let priv_ptr = ptr.offset(private_offset);
-    let imp_storage = priv_ptr as *mut Option<T>;
-
-    let imp = (*imp_storage).take().expect("No private struct");
-    drop(imp);
+    let imp_storage = priv_ptr as *mut T;
+    ptr::drop_in_place(imp_storage);
 
     // Chain up to the parent class' finalize implementation, if any.
     let parent_class = &*(data.as_ref().get_parent_class() as *const gobject_sys::GObjectClass);
@@ -457,21 +459,18 @@ pub fn register_type<T: ObjectSubclass>() -> Type
 where
     <<T as ObjectSubclass>::ParentType as ObjectType>::RustClassType: IsSubclassable<T>,
 {
+    // GLib aligns the type private data to two gsizes so we can't safely store any type there that
+    // requires a bigger alignment.
+    if mem::align_of::<T>() > 2 * mem::size_of::<usize>() {
+        panic!(
+            "Alignment {} of type not supported, bigger than {}",
+            mem::align_of::<T>(),
+            2 * mem::size_of::<usize>(),
+        );
+    }
+
     unsafe {
         use std::ffi::CString;
-
-        let type_info = gobject_sys::GTypeInfo {
-            class_size: mem::size_of::<T::Class>() as u16,
-            base_init: None,
-            base_finalize: None,
-            class_init: Some(class_init::<T>),
-            class_finalize: None,
-            class_data: ptr::null_mut(),
-            instance_size: mem::size_of::<T::Instance>() as u16,
-            n_preallocs: 0,
-            instance_init: Some(instance_init::<T>),
-            value_table: ptr::null(),
-        };
 
         let type_name = CString::new(T::NAME).unwrap();
         if gobject_sys::g_type_from_name(type_name.as_ptr()) != gobject_sys::G_TYPE_INVALID {
@@ -481,10 +480,13 @@ where
             );
         }
 
-        let type_ = from_glib(gobject_sys::g_type_register_static(
+        let type_ = from_glib(gobject_sys::g_type_register_static_simple(
             <T::ParentType as StaticType>::static_type().to_glib(),
             type_name.as_ptr(),
-            &type_info,
+            mem::size_of::<T::Class>() as u32,
+            Some(class_init::<T>),
+            mem::size_of::<T::Instance>() as u32,
+            Some(instance_init::<T>),
             if T::ABSTRACT {
                 gobject_sys::G_TYPE_FLAG_ABSTRACT
             } else {
@@ -494,8 +496,12 @@ where
 
         let mut data = T::type_data();
         (*data.as_mut()).type_ = type_;
-        let private_offset =
-            gobject_sys::g_type_add_instance_private(type_.to_glib(), mem::size_of::<Option<T>>());
+
+        let private_offset = if mem::size_of::<T>() == 0 {
+            0
+        } else {
+            gobject_sys::g_type_add_instance_private(type_.to_glib(), mem::size_of::<T>())
+        };
         (*data.as_mut()).private_offset = private_offset as isize;
 
         T::type_init(&mut InitializingType::<T>(type_, marker::PhantomData));

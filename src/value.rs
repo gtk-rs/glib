@@ -119,11 +119,7 @@ impl fmt::Display for GetError {
     }
 }
 
-impl error::Error for GetError {
-    fn description(&self) -> &str {
-        "GetError: Value type mismatch"
-    }
-}
+impl error::Error for GetError {}
 
 /// A generic value capable of carrying various types.
 ///
@@ -183,7 +179,7 @@ impl Value {
                 T::static_type().to_glib(),
             ));
             if ok {
-                // This transmute is safe because Value and TypedValue have the same
+                // This cast is safe because Value and TypedValue have the same
                 // representation: the only difference is the zero-sized phantom data
                 Some(&*(self as *const Value as *const TypedValue<T>))
             } else {
@@ -269,9 +265,8 @@ impl Value {
     #[doc(hidden)]
     pub fn into_raw(self) -> gobject_sys::GValue {
         unsafe {
-            let ret = ptr::read(&self.0);
-            mem::forget(self);
-            ret
+            let s = mem::ManuallyDrop::new(self);
+            ptr::read(&s.0)
         }
     }
 
@@ -800,7 +795,7 @@ impl SendValue {
                 T::static_type().to_glib(),
             ));
             if ok {
-                // This transmute is safe because SendValue and TypedValue have the same
+                // This cast is safe because SendValue and TypedValue have the same
                 // representation: the only difference is the zero-sized phantom data
                 Some(&*(self as *const SendValue as *const TypedValue<T>))
             } else {
@@ -898,6 +893,10 @@ impl ToValue for SendValue {
 ///
 /// Types that don't support a `None` value always return `Some`.
 pub trait FromValueOptional<'a>: StaticType + Sized {
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the given `Value` is of a suitable
+    /// type for this conversion.
     unsafe fn from_value_optional(&'a Value) -> Option<Self>;
 }
 
@@ -905,6 +904,10 @@ pub trait FromValueOptional<'a>: StaticType + Sized {
 ///
 /// Only implemented for types that don't support a `None` value.
 pub trait FromValue<'a>: FromValueOptional<'a> {
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the given `Value` is of a suitable
+    /// type for this conversion.
     unsafe fn from_value(&'a Value) -> Self;
 }
 
@@ -912,11 +915,19 @@ pub trait FromValue<'a>: FromValueOptional<'a> {
 ///
 /// Only implemented for types that support a `None` value.
 pub trait SetValueOptional: SetValue {
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the given `Value` is of a suitable
+    /// type for this conversion.
     unsafe fn set_value_optional(&mut Value, Option<&Self>);
 }
 
 /// Sets a value.
 pub trait SetValue: StaticType {
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the given `Value` is of a suitable
+    /// type for this conversion.
     unsafe fn set_value(&mut Value, &Self);
 }
 
