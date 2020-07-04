@@ -5,7 +5,7 @@ homepage = "http://gtk-rs.org/"
 authors = ["The Gtk-rs Project Developers"]
 description = "Rust bindings for the GLib library"
 readme = "README.md"
-version = "0.9.3"
+version = "0.10.0"
 keywords = ["glib", "gtk-rs", "gnome", "GUI"]
 repository = "https://github.com/gtk-rs/glib"
 license = "MIT"
@@ -30,9 +30,9 @@ futures-task = "0.3"
 futures-executor = "0.3"
 futures-util = "0.3"
 futures-channel = "0.3"
-glib-sys = "0.9.1"
-gobject-sys = "0.9.1"
-glib-macros = "0.9"
+glib-sys = "0.10.0"
+gobject-sys = "0.10.0"
+glib-macros = "0.10.0"
 
 [dev-dependencies]
 tempfile = "3"
