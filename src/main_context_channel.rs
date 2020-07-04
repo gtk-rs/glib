@@ -283,7 +283,7 @@ unsafe extern "C" fn finalize<T, F: FnMut(T) -> Continue + 'static>(
 /// See [`MainContext::channel()`] for how to create such a `Sender`.
 ///
 /// [`MainContext::channel()`]: struct.MainContext.html#method.channel
-pub struct Sender<T>(Option<Channel<T>>);
+pub struct Sender<T>(Channel<T>);
 
 impl<T> fmt::Debug for Sender<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -293,24 +293,20 @@ impl<T> fmt::Debug for Sender<T> {
 
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Sender<T> {
-        Sender::new(self.0.as_ref())
+        Sender::new(&self.0)
     }
 }
 
 impl<T> Sender<T> {
-    fn new(channel: Option<&Channel<T>>) -> Self {
-        if let Some(channel) = channel {
-            let mut inner = (channel.0).0.lock().unwrap();
-            inner.num_senders += 1;
-            Sender(Some(channel.clone()))
-        } else {
-            Sender(None)
-        }
+    fn new(channel: &Channel<T>) -> Self {
+        let mut inner = (channel.0).0.lock().unwrap();
+        inner.num_senders += 1;
+        Sender(channel.clone())
     }
 
     /// Sends a value to the channel.
     pub fn send(&self, t: T) -> Result<(), mpsc::SendError<T>> {
-        self.0.as_ref().expect("Sender with no channel").send(t)
+        self.0.send(t)
     }
 }
 
@@ -318,8 +314,7 @@ impl<T> Drop for Sender<T> {
     fn drop(&mut self) {
         // Decrease the number of senders and wake up the channel if this
         // was the last sender that was dropped.
-        let channel = self.0.take().expect("Sender with no channel");
-        let mut inner = (channel.0).0.lock().unwrap();
+        let mut inner = ((self.0).0).0.lock().unwrap();
         inner.num_senders -= 1;
         if inner.num_senders == 0 {
             inner.set_ready_time(0);
@@ -334,7 +329,7 @@ impl<T> Drop for Sender<T> {
 /// See [`MainContext::sync_channel()`] for how to create such a `SyncSender`.
 ///
 /// [`MainContext::sync_channel()`]: struct.MainContext.html#method.sync_channel
-pub struct SyncSender<T>(Option<Channel<T>>);
+pub struct SyncSender<T>(Channel<T>);
 
 impl<T> fmt::Debug for SyncSender<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -344,29 +339,25 @@ impl<T> fmt::Debug for SyncSender<T> {
 
 impl<T> Clone for SyncSender<T> {
     fn clone(&self) -> SyncSender<T> {
-        SyncSender::new(self.0.as_ref())
+        SyncSender::new(&self.0)
     }
 }
 
 impl<T> SyncSender<T> {
-    fn new(channel: Option<&Channel<T>>) -> Self {
-        if let Some(channel) = channel {
-            let mut inner = (channel.0).0.lock().unwrap();
-            inner.num_senders += 1;
-            SyncSender(Some(channel.clone()))
-        } else {
-            SyncSender(None)
-        }
+    fn new(channel: &Channel<T>) -> Self {
+        let mut inner = (channel.0).0.lock().unwrap();
+        inner.num_senders += 1;
+        SyncSender(channel.clone())
     }
 
     /// Sends a value to the channel and blocks if the channel is full.
     pub fn send(&self, t: T) -> Result<(), mpsc::SendError<T>> {
-        self.0.as_ref().expect("Sender with no channel").send(t)
+        self.0.send(t)
     }
 
     /// Sends a value to the channel.
     pub fn try_send(&self, t: T) -> Result<(), mpsc::TrySendError<T>> {
-        self.0.as_ref().expect("Sender with no channel").try_send(t)
+        self.0.try_send(t)
     }
 }
 
@@ -374,8 +365,7 @@ impl<T> Drop for SyncSender<T> {
     fn drop(&mut self) {
         // Decrease the number of senders and wake up the channel if this
         // was the last sender that was dropped.
-        let channel = self.0.take().expect("Sender with no channel");
-        let mut inner = (channel.0).0.lock().unwrap();
+        let mut inner = ((self.0).0).0.lock().unwrap();
         inner.num_senders -= 1;
         if inner.num_senders == 0 {
             inner.set_ready_time(0);
@@ -506,7 +496,7 @@ impl MainContext {
     pub fn channel<T>(priority: Priority) -> (Sender<T>, Receiver<T>) {
         let channel = Channel::new(None);
         let receiver = Receiver(Some(channel.clone()), priority);
-        let sender = Sender::new(Some(&channel));
+        let sender = Sender::new(&channel);
 
         (sender, receiver)
     }
@@ -528,7 +518,7 @@ impl MainContext {
     pub fn sync_channel<T>(priority: Priority, bound: usize) -> (SyncSender<T>, Receiver<T>) {
         let channel = Channel::new(Some(bound));
         let receiver = Receiver(Some(channel.clone()), priority);
-        let sender = SyncSender::new(Some(&channel));
+        let sender = SyncSender::new(&channel);
 
         (sender, receiver)
     }
@@ -539,6 +529,7 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
     use std::rc::Rc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::thread;
     use std::time;
     use MainLoop;
@@ -634,14 +625,14 @@ mod tests {
 
         let (sender, receiver) = MainContext::channel::<i32>(Priority::default());
 
-        struct Helper(Arc<Mutex<bool>>);
+        struct Helper(Arc<AtomicBool>);
         impl Drop for Helper {
             fn drop(&mut self) {
-                *self.0.lock().unwrap() = true;
+                self.0.store(true, Ordering::Relaxed);
             }
         }
 
-        let dropped = Arc::new(Mutex::new(false));
+        let dropped = Arc::new(AtomicBool::new(false));
         let helper = Helper(dropped.clone());
         let source_id = receiver.attach(Some(&c), move |_| {
             let _helper = &helper;
@@ -654,7 +645,7 @@ mod tests {
         // This should drop the closure
         drop(source);
 
-        assert_eq!(*dropped.lock().unwrap(), true);
+        assert!(dropped.load(Ordering::Relaxed));
         assert_eq!(sender.send(1), Err(mpsc::SendError(1)));
     }
 
@@ -698,7 +689,7 @@ mod tests {
         // Wait until the channel is full, and then another
         // 50ms to make sure the sender is blocked now and
         // can wake up properly once an item was consumed
-        let _ = wait_receiver.recv().unwrap();
+        assert!(wait_receiver.recv().is_ok());
         thread::sleep(time::Duration::from_millis(50));
         l.run();
 
@@ -741,7 +732,7 @@ mod tests {
             for i in 4.. {
                 // This will block at some point until the
                 // receiver is removed from the main context
-                if let Err(_) = sender.send(i) {
+                if sender.send(i).is_err() {
                     break;
                 }
             }
@@ -750,7 +741,7 @@ mod tests {
         // Wait until the channel is full, and then another
         // 50ms to make sure the sender is blocked now and
         // can wake up properly once an item was consumed
-        let _ = wait_receiver.recv().unwrap();
+        assert!(wait_receiver.recv().is_ok());
         thread::sleep(time::Duration::from_millis(50));
         l.run();
 
@@ -782,7 +773,7 @@ mod tests {
         // Wait until the channel is full, and then another
         // 50ms to make sure the sender is blocked now and
         // can wake up properly once an item was consumed
-        let _ = wait_receiver.recv().unwrap();
+        assert!(wait_receiver.recv().is_ok());
         thread::sleep(time::Duration::from_millis(50));
         drop(receiver);
         thread.join().unwrap();
@@ -812,7 +803,7 @@ mod tests {
         // Wait until the thread is started, then wait another 50ms and
         // during that time it must not have proceeded yet to send the
         // second item because we did not yet receive the first item.
-        let _ = wait_receiver.recv().unwrap();
+        assert!(wait_receiver.recv().is_ok());
         assert_eq!(
             wait_receiver.recv_timeout(time::Duration::from_millis(50)),
             Err(mpsc::RecvTimeoutError::Timeout)
@@ -824,7 +815,7 @@ mod tests {
         receiver.attach(Some(&c), move |item| {
             // We consumed one item so there should be one item on
             // the other receiver now.
-            let _ = wait_receiver.recv().unwrap();
+            assert!(wait_receiver.recv().is_ok());
             *sum_clone.borrow_mut() += item;
             if *sum_clone.borrow() == 6 {
                 // But as we didn't consume the next one yet, there must be no

@@ -6,6 +6,7 @@
 
 use glib_sys;
 use gobject_sys;
+use quark::Quark;
 use std::cmp;
 use std::fmt;
 use std::hash;
@@ -59,6 +60,12 @@ pub unsafe trait ObjectType:
 
 /// Unsafe variant of the `From` trait.
 pub trait UnsafeFrom<T> {
+    /// # Safety
+    ///
+    /// It is the responsibility of the caller to ensure *all* invariants of
+    /// the `T` hold before this is called, and that subsequent to conversion
+    /// to assume nothing other than the invariants of the output.  Implementors
+    /// of this must ensure that the invariants of the output type hold.
     unsafe fn unsafe_from(t: T) -> Self;
 }
 
@@ -343,7 +350,7 @@ pub trait Cast: ObjectType {
         if !self.is::<T>() {
             None
         } else {
-            // This transmute is safe because all our wrapper types have the
+            // This cast is safe because all our wrapper types have the
             // same representation except for the name and the phantom data
             // type. IsA<> is an unsafe trait that must only be implemented
             // if this is a valid wrapper type
@@ -353,7 +360,14 @@ pub trait Cast: ObjectType {
 
     /// Casts to `T` unconditionally.
     ///
+    /// # Panics
+    ///
     /// Panics if compiled with `debug_assertions` and the instance doesn't implement `T`.
+    ///
+    /// # Safety
+    ///
+    /// If not running with `debug_assertions` enabled, the caller is responsible
+    /// for ensuring that the instance implements `T`
     unsafe fn unsafe_cast<T: ObjectType>(self) -> T {
         debug_assert!(self.is::<T>());
         T::unsafe_from(self.into())
@@ -361,10 +375,17 @@ pub trait Cast: ObjectType {
 
     /// Casts to `&T` unconditionally.
     ///
+    /// # Panics
+    ///
     /// Panics if compiled with `debug_assertions` and the instance doesn't implement `T`.
+    ///
+    /// # Safety
+    ///
+    /// If not running with `debug_assertions` enabled, the caller is responsible
+    /// for ensuring that the instance implements `T`
     unsafe fn unsafe_cast_ref<T: ObjectType>(&self) -> &T {
         debug_assert!(self.is::<T>());
-        // This transmute is safe because all our wrapper types have the
+        // This cast is safe because all our wrapper types have the
         // same representation except for the name and the phantom data
         // type. IsA<> is an unsafe trait that must only be implemented
         // if this is a valid wrapper type
@@ -382,7 +403,6 @@ impl<Super: IsA<Super>, Sub: IsA<Super>> CanDowncast<Sub> for Super {}
 // Manual implementation of glib_shared_wrapper! because of special cases
 pub struct ObjectRef {
     inner: ptr::NonNull<GObject>,
-    borrowed: bool,
 }
 
 impl Clone for ObjectRef {
@@ -390,7 +410,6 @@ impl Clone for ObjectRef {
         unsafe {
             ObjectRef {
                 inner: ptr::NonNull::new_unchecked(gobject_sys::g_object_ref(self.inner.as_ptr())),
-                borrowed: false,
             }
         }
     }
@@ -399,9 +418,7 @@ impl Clone for ObjectRef {
 impl Drop for ObjectRef {
     fn drop(&mut self) {
         unsafe {
-            if !self.borrowed {
-                gobject_sys::g_object_unref(self.inner.as_ptr());
-            }
+            gobject_sys::g_object_unref(self.inner.as_ptr());
         }
     }
 }
@@ -416,7 +433,6 @@ impl fmt::Debug for ObjectRef {
         f.debug_struct("ObjectRef")
             .field("inner", &self.inner)
             .field("type", &type_)
-            .field("borrowed", &self.borrowed)
             .finish()
     }
 }
@@ -549,7 +565,6 @@ impl FromGlibPtrNone<*mut GObject> for ObjectRef {
         // Attention: This takes ownership of floating references!
         ObjectRef {
             inner: ptr::NonNull::new_unchecked(gobject_sys::g_object_ref_sink(ptr)),
-            borrowed: false,
         }
     }
 }
@@ -571,7 +586,6 @@ impl FromGlibPtrFull<*mut GObject> for ObjectRef {
 
         ObjectRef {
             inner: ptr::NonNull::new_unchecked(ptr),
-            borrowed: false,
         }
     }
 }
@@ -579,20 +593,19 @@ impl FromGlibPtrFull<*mut GObject> for ObjectRef {
 #[doc(hidden)]
 impl FromGlibPtrBorrow<*mut GObject> for ObjectRef {
     #[inline]
-    unsafe fn from_glib_borrow(ptr: *mut GObject) -> Self {
+    unsafe fn from_glib_borrow(ptr: *mut GObject) -> Borrowed<Self> {
         assert!(!ptr.is_null());
 
-        ObjectRef {
+        Borrowed::new(ObjectRef {
             inner: ptr::NonNull::new_unchecked(ptr),
-            borrowed: true,
-        }
+        })
     }
 }
 
 #[doc(hidden)]
 impl FromGlibPtrBorrow<*const GObject> for ObjectRef {
     #[inline]
-    unsafe fn from_glib_borrow(ptr: *const GObject) -> Self {
+    unsafe fn from_glib_borrow(ptr: *const GObject) -> Borrowed<Self> {
         from_glib_borrow(ptr as *mut GObject)
     }
 }
@@ -898,10 +911,14 @@ macro_rules! glib_object_wrapper {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
             #[allow(clippy::missing_safety_doc)]
-            unsafe fn from_glib_borrow(ptr: *mut $ffi_name) -> Self {
+            unsafe fn from_glib_borrow(ptr: *mut $ffi_name) -> $crate::translate::Borrowed<Self> {
                 debug_assert!($crate::types::instance_of::<Self>(ptr as *const _));
-                $name($crate::translate::from_glib_borrow(ptr as *mut _),
-                      ::std::marker::PhantomData)
+                $crate::translate::Borrowed::new(
+                    $name(
+                        $crate::translate::from_glib_borrow::<_, $crate::object::ObjectRef>(ptr as *mut _).into_inner(),
+                        ::std::marker::PhantomData,
+                    )
+                )
             }
         }
 
@@ -910,8 +927,8 @@ macro_rules! glib_object_wrapper {
             #[inline]
             #[allow(clippy::cast_ptr_alignment)]
             #[allow(clippy::missing_safety_doc)]
-            unsafe fn from_glib_borrow(ptr: *const $ffi_name) -> Self {
-                $crate::translate::from_glib_borrow(ptr as *mut $ffi_name)
+            unsafe fn from_glib_borrow(ptr: *const $ffi_name) -> $crate::translate::Borrowed<Self> {
+                $crate::translate::from_glib_borrow::<_, $name>(ptr as *mut $ffi_name)
             }
         }
 
@@ -1158,6 +1175,7 @@ macro_rules! glib_object_wrapper {
 
     (@class_impl $name:ident, $ffi_class_name:path, $rust_class_name:ident) => {
         #[repr(C)]
+        #[derive(Debug)]
         pub struct $rust_class_name($ffi_class_name);
 
         unsafe impl $crate::object::IsClassFor for $rust_class_name {
@@ -1222,13 +1240,50 @@ impl Object {
         use std::ffi::CString;
 
         if !type_.is_a(&Object::static_type()) {
-            return Err(glib_bool_error!("Can't instantiate non-GObject objects"));
+            return Err(glib_bool_error!(
+                "Can't instantiate non-GObject type '{}'",
+                type_
+            ));
         }
+
+        unsafe {
+            if gobject_sys::g_type_test_flags(
+                type_.to_glib(),
+                gobject_sys::G_TYPE_FLAG_INSTANTIATABLE,
+            ) == glib_sys::GFALSE
+            {
+                return Err(glib_bool_error!("Can't instantiate type '{}'", type_));
+            }
+
+            if gobject_sys::g_type_test_flags(type_.to_glib(), gobject_sys::G_TYPE_FLAG_ABSTRACT)
+                != glib_sys::GFALSE
+            {
+                return Err(glib_bool_error!(
+                    "Can't instantiate abstract type '{}'",
+                    type_
+                ));
+            }
+        }
+
+        let klass = ObjectClass::from_type(type_)
+            .ok_or_else(|| glib_bool_error!("Can't retrieve class for type '{}'", type_))?;
+        let pspecs = klass.list_properties();
 
         let params = properties
             .iter()
-            .map(|&(name, value)| (CString::new(name).unwrap(), value.to_value()))
-            .collect::<Vec<_>>();
+            .map(|&(name, value)| {
+                let pspec = pspecs
+                    .iter()
+                    .find(|p| p.get_name() == name)
+                    .ok_or_else(|| {
+                        glib_bool_error!("Can't find property '{}' for type '{}'", name, type_)
+                    })?;
+
+                let mut value = value.to_value();
+                validate_property_type(type_, true, &pspec, &mut value)?;
+                Ok((CString::new(name).unwrap(), value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let params_c = params
             .iter()
@@ -1245,7 +1300,10 @@ impl Object {
                 mut_override(params_c.as_ptr()),
             );
             if ptr.is_null() {
-                Err(glib_bool_error!("Can't instantiate object"))
+                Err(glib_bool_error!(
+                    "Can't instantiate object for type '{}'",
+                    type_
+                ))
             } else if type_.is_a(&InitiallyUnowned::static_type()) {
                 // Attention: This takes ownership of the floating reference
                 Ok(from_glib_none(ptr))
@@ -1268,15 +1326,42 @@ pub trait ObjectExt: ObjectType {
         property_name: N,
         value: &dyn ToValue,
     ) -> Result<(), BoolError>;
+    fn set_properties(&self, property_values: &[(&str, &dyn ToValue)]) -> Result<(), BoolError>;
     fn get_property<'a, N: Into<&'a str>>(&self, property_name: N) -> Result<Value, BoolError>;
-    fn has_property<'a, N: Into<&'a str>>(
-        &self,
-        property_name: N,
-        type_: Option<Type>,
-    ) -> Result<(), BoolError>;
+    fn has_property<'a, N: Into<&'a str>>(&self, property_name: N, type_: Option<Type>) -> bool;
     fn get_property_type<'a, N: Into<&'a str>>(&self, property_name: N) -> Option<Type>;
     fn find_property<'a, N: Into<&'a str>>(&self, property_name: N) -> Option<::ParamSpec>;
     fn list_properties(&self) -> Vec<::ParamSpec>;
+
+    /// # Safety
+    ///
+    /// This function doesn't store type information
+    unsafe fn set_qdata<QD: 'static>(&self, key: Quark, value: QD);
+
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the returned value is of a suitable type
+    unsafe fn get_qdata<QD: 'static>(&self, key: Quark) -> Option<&QD>;
+
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the returned value is of a suitable type
+    unsafe fn steal_qdata<QD: 'static>(&self, key: Quark) -> Option<QD>;
+
+    /// # Safety
+    ///
+    /// This function doesn't store type information
+    unsafe fn set_data<QD: 'static>(&self, key: &str, value: QD);
+
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the returned value is of a suitable type
+    unsafe fn get_data<QD: 'static>(&self, key: &str) -> Option<&QD>;
+
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the returned value is of a suitable type
+    unsafe fn steal_data<QD: 'static>(&self, key: &str) -> Option<QD>;
 
     fn block_signal(&self, handler_id: &SignalHandlerId);
     fn unblock_signal(&self, handler_id: &SignalHandlerId);
@@ -1300,6 +1385,7 @@ pub trait ObjectExt: ObjectType {
     where
         N: Into<&'a str>,
         F: Fn(&[Value]) -> Option<Value> + 'static;
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn connect_unsafe<'a, N, F>(
         &self,
         signal_name: N,
@@ -1321,6 +1407,7 @@ pub trait ObjectExt: ObjectType {
         name: Option<&str>,
         f: F,
     ) -> SignalHandlerId;
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn connect_notify_unsafe<F: Fn(&Self, &::ParamSpec)>(
         &self,
         name: Option<&str>,
@@ -1358,6 +1445,44 @@ impl<T: ObjectType> ObjectExt for T {
         }
     }
 
+    fn set_properties(&self, property_values: &[(&str, &dyn ToValue)]) -> Result<(), BoolError> {
+        use std::ffi::CString;
+
+        let pspecs = self.list_properties();
+
+        let params = property_values
+            .iter()
+            .map(|&(name, value)| {
+                let pspec = pspecs
+                    .iter()
+                    .find(|p| p.get_name() == name)
+                    .ok_or_else(|| {
+                        glib_bool_error!(
+                            "Can't find property '{}' for type '{}'",
+                            name,
+                            self.get_type()
+                        )
+                    })?;
+
+                let mut value = value.to_value();
+                validate_property_type(self.get_type(), false, &pspec, &mut value)?;
+                Ok((CString::new(name).unwrap(), value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (name, value) in params {
+            unsafe {
+                gobject_sys::g_object_set_property(
+                    self.as_object_ref().to_glib_none().0,
+                    name.as_ptr(),
+                    value.to_glib_none().0,
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     fn set_property<'a, N: Into<&'a str>>(
         &self,
         property_name: N,
@@ -1369,71 +1494,16 @@ impl<T: ObjectType> ObjectExt for T {
         let pspec = match self.find_property(property_name) {
             Some(pspec) => pspec,
             None => {
-                return Err(glib_bool_error!("property not found"));
+                return Err(glib_bool_error!(
+                    "property '{}' of type '{}' not found",
+                    property_name,
+                    self.get_type()
+                ));
             }
         };
 
-        if !pspec.get_flags().contains(::ParamFlags::WRITABLE)
-            || pspec.get_flags().contains(::ParamFlags::CONSTRUCT_ONLY)
-        {
-            return Err(glib_bool_error!("property is not writable"));
-        }
-
+        validate_property_type(self.get_type(), false, &pspec, &mut property_value)?;
         unsafe {
-            // While GLib actually allows all types that can somehow be transformed
-            // into the property type, we're more restrictive here to be consistent
-            // with Rust's type rules. We only allow the exact same type, or if the
-            // value type is a subtype of the property type
-            let valid_type: bool = from_glib(gobject_sys::g_type_check_value_holds(
-                mut_override(property_value.to_glib_none().0),
-                pspec.get_value_type().to_glib(),
-            ));
-
-            // If it's not directly a valid type but an object type, we check if the
-            // actual type of the contained object is compatible and if so create
-            // a properly type Value. This can happen if the type field in the
-            // Value is set to a more generic type than the contained value
-            if !valid_type && property_value.type_().is_a(&Object::static_type()) {
-                match property_value.get::<Object>() {
-                    Ok(Some(obj)) => {
-                        if obj.get_type().is_a(&pspec.get_value_type()) {
-                            property_value.0.g_type = pspec.get_value_type().to_glib();
-                        } else {
-                            return Err(glib_bool_error!(format!(
-                                concat!(
-                                    "property can't be set from the given object type ",
-                                    "(expected: {:?}, got: {:?})",
-                                ),
-                                pspec.get_value_type(),
-                                obj.get_type(),
-                            )));
-                        }
-                    }
-                    Ok(None) => {
-                        // If the value is None then the type is compatible too
-                        property_value.0.g_type = pspec.get_value_type().to_glib();
-                    }
-                    Err(_) => unreachable!("property_value type conformity already checked"),
-                }
-            } else if !valid_type {
-                return Err(glib_bool_error!(format!(
-                    "property can't be set from the given type (expected: {:?}, got: {:?})",
-                    pspec.get_value_type(),
-                    property_value.type_(),
-                )));
-            }
-
-            let changed: bool = from_glib(gobject_sys::g_param_value_validate(
-                pspec.to_glib_none().0,
-                property_value.to_glib_none_mut().0,
-            ));
-            let change_allowed = pspec.get_flags().contains(::ParamFlags::LAX_VALIDATION);
-            if changed && !change_allowed {
-                return Err(glib_bool_error!(
-                    "property can't be set from given value, it is invalid or out of range"
-                ));
-            }
-
             gobject_sys::g_object_set_property(
                 self.as_object_ref().to_glib_none().0,
                 property_name.to_glib_none().0,
@@ -1450,12 +1520,20 @@ impl<T: ObjectType> ObjectExt for T {
         let pspec = match self.find_property(property_name) {
             Some(pspec) => pspec,
             None => {
-                return Err(glib_bool_error!("property not found"));
+                return Err(glib_bool_error!(
+                    "property '{}' of type '{}' not found",
+                    property_name,
+                    self.get_type()
+                ));
             }
         };
 
         if !pspec.get_flags().contains(::ParamFlags::READABLE) {
-            return Err(glib_bool_error!("property is not readable"));
+            return Err(glib_bool_error!(
+                "property '{}' of type '{}' is not readable",
+                property_name,
+                self.get_type()
+            ));
         }
 
         unsafe {
@@ -1468,11 +1546,64 @@ impl<T: ObjectType> ObjectExt for T {
 
             // This can't really happen unless something goes wrong inside GObject
             if value.type_() == ::Type::Invalid {
-                Err(glib_bool_error!("Failed to get property value"))
+                Err(glib_bool_error!(
+                    "Failed to get property value for property '{}' of type '{}'",
+                    property_name,
+                    self.get_type()
+                ))
             } else {
                 Ok(value)
             }
         }
+    }
+
+    unsafe fn set_qdata<QD: 'static>(&self, key: Quark, value: QD) {
+        unsafe extern "C" fn drop_value<QD>(ptr: glib_sys::gpointer) {
+            debug_assert!(!ptr.is_null());
+            let value: Box<QD> = Box::from_raw(ptr as *mut QD);
+            drop(value)
+        }
+
+        let ptr = Box::into_raw(Box::new(value)) as glib_sys::gpointer;
+        gobject_sys::g_object_set_qdata_full(
+            self.as_object_ref().to_glib_none().0,
+            key.to_glib(),
+            ptr,
+            Some(drop_value::<QD>),
+        );
+    }
+
+    unsafe fn get_qdata<QD: 'static>(&self, key: Quark) -> Option<&QD> {
+        let ptr =
+            gobject_sys::g_object_get_qdata(self.as_object_ref().to_glib_none().0, key.to_glib());
+        if ptr.is_null() {
+            None
+        } else {
+            Some(&*(ptr as *const QD))
+        }
+    }
+
+    unsafe fn steal_qdata<QD: 'static>(&self, key: Quark) -> Option<QD> {
+        let ptr =
+            gobject_sys::g_object_steal_qdata(self.as_object_ref().to_glib_none().0, key.to_glib());
+        if ptr.is_null() {
+            None
+        } else {
+            let value: Box<QD> = Box::from_raw(ptr as *mut QD);
+            Some(*value)
+        }
+    }
+
+    unsafe fn set_data<QD: 'static>(&self, key: &str, value: QD) {
+        self.set_qdata::<QD>(Quark::from_string(key), value)
+    }
+
+    unsafe fn get_data<QD: 'static>(&self, key: &str) -> Option<&QD> {
+        self.get_qdata::<QD>(Quark::from_string(key))
+    }
+
+    unsafe fn steal_data<QD: 'static>(&self, key: &str) -> Option<QD> {
+        self.steal_qdata::<QD>(Quark::from_string(key))
     }
 
     fn block_signal(&self, handler_id: &SignalHandlerId) {
@@ -1533,7 +1664,7 @@ impl<T: ObjectType> ObjectExt for T {
         {
             let f: &F = &*(f as *const F);
             f(
-                &Object::from_glib_borrow(this).unsafe_cast(),
+                Object::from_glib_borrow(this).unsafe_cast_ref(),
                 &from_glib_borrow(param_spec),
             )
         }
@@ -1548,7 +1679,9 @@ impl<T: ObjectType> ObjectExt for T {
         ::signal::connect_raw(
             self.as_object_ref().to_glib_none().0,
             signal_name.as_ptr() as *const _,
-            Some(mem::transmute(notify_trampoline::<Self, F> as usize)),
+            Some(mem::transmute::<_, unsafe extern "C" fn()>(
+                notify_trampoline::<Self, F> as *const (),
+            )),
             Box::into_raw(f),
         )
     }
@@ -1573,11 +1706,7 @@ impl<T: ObjectType> ObjectExt for T {
         }
     }
 
-    fn has_property<'a, N: Into<&'a str>>(
-        &self,
-        property_name: N,
-        type_: Option<Type>,
-    ) -> Result<(), BoolError> {
+    fn has_property<'a, N: Into<&'a str>>(&self, property_name: N, type_: Option<Type>) -> bool {
         self.get_object_class().has_property(property_name, type_)
     }
 
@@ -1651,14 +1780,22 @@ impl<T: ObjectType> ObjectExt for T {
         ));
 
         if !found {
-            return Err(glib_bool_error!("Signal not found"));
+            return Err(glib_bool_error!(
+                "Signal '{}' of type '{}' not found",
+                signal_name,
+                type_
+            ));
         }
 
         let mut details = mem::MaybeUninit::zeroed();
         gobject_sys::g_signal_query(signal_id, details.as_mut_ptr());
         let details = details.assume_init();
         if details.signal_id != signal_id {
-            return Err(glib_bool_error!("Signal not found"));
+            return Err(glib_bool_error!(
+                "Signal '{}' of type '{}' not found",
+                signal_name,
+                type_
+            ));
         }
 
         // This is actually G_SIGNAL_TYPE_STATIC_SCOPE
@@ -1670,8 +1807,10 @@ impl<T: ObjectType> ObjectExt for T {
             if return_type == Type::Unit {
                 if let Some(ret) = ret {
                     panic!(
-                        "Signal required no return value but got value of type {}",
-                        ret.type_().name()
+                        "Signal '{}' of type '{}' required no return value but got value of type '{}'",
+                        signal_name,
+                        type_,
+                        ret.type_()
                     );
                 }
                 None
@@ -1693,8 +1832,14 @@ impl<T: ObjectType> ObjectExt for T {
                                     if obj.get_type().is_a(&return_type) {
                                         ret.0.g_type = return_type.to_glib();
                                     } else {
-                                        panic!("Signal required return value of type {} but got {} (actual {})",
-                                           return_type.name(), ret.type_().name(), obj.get_type().name());
+                                        panic!(
+                                            "Signal '{}' of type '{}' required return value of type '{}' but got '{}' (actual '{}')",
+                                            signal_name,
+                                            type_,
+                                            return_type,
+                                            ret.type_(),
+                                            obj.get_type()
+                                        );
                                     }
                                 }
                                 Ok(None) => {
@@ -1705,16 +1850,20 @@ impl<T: ObjectType> ObjectExt for T {
                             }
                         } else if !valid_type {
                             panic!(
-                                "Signal required return value of type {} but got {}",
-                                return_type.name(),
-                                ret.type_().name()
+                                "Signal '{}' of type '{}' required return value of type '{}' but got '{}'",
+                                signal_name,
+                                type_,
+                                return_type,
+                                ret.type_()
                             );
                         }
                         Some(ret)
                     }
                     None => {
                         panic!(
-                            "Signal required return value of type {} but got None",
+                            "Signal '{}' of type '{}' required return value of type '{}' but got None",
+                            signal_name,
+                            type_,
                             return_type.name()
                         );
                     }
@@ -1730,7 +1879,11 @@ impl<T: ObjectType> ObjectExt for T {
         );
 
         if handler == 0 {
-            Err(glib_bool_error!("Failed to connect to signal"))
+            Err(glib_bool_error!(
+                "Failed to connect to signal '{}' of type '{}'",
+                signal_name,
+                type_
+            ))
         } else {
             Ok(from_glib(handler))
         }
@@ -1757,25 +1910,50 @@ impl<T: ObjectType> ObjectExt for T {
             ));
 
             if !found {
-                return Err(glib_bool_error!("Signal not found"));
+                return Err(glib_bool_error!(
+                    "Signal '{}' of type '{}' not found",
+                    signal_name,
+                    type_
+                ));
             }
 
             let mut details = mem::MaybeUninit::zeroed();
             gobject_sys::g_signal_query(signal_id, details.as_mut_ptr());
             let details = details.assume_init();
             if details.signal_id != signal_id {
-                return Err(glib_bool_error!("Signal not found"));
+                return Err(glib_bool_error!(
+                    "Signal '{}' of type '{}' not found",
+                    signal_name,
+                    type_
+                ));
             }
 
             if details.n_params != args.len() as u32 {
-                return Err(glib_bool_error!("Incompatible number of arguments"));
+                return Err(
+                    glib_bool_error!(
+                        "Incompatible number of arguments for signal '{}' of type '{}' (expected {}, got {})",
+                        signal_name,
+                        type_,
+                        details.n_params,
+                        args.len(),
+                    )
+                );
             }
 
             for (i, item) in args.iter().enumerate() {
                 let arg_type =
                     *(details.param_types.add(i)) & (!gobject_sys::G_TYPE_FLAG_RESERVED_ID_BIT);
                 if arg_type != item.to_value_type().to_glib() {
-                    return Err(glib_bool_error!("Incompatible argument types"));
+                    return Err(
+                        glib_bool_error!(
+                            "Incompatible argument type in argument {} for signal '{}' of type '{}' (expected {}, got {})",
+                            i,
+                            signal_name,
+                            type_,
+                            arg_type,
+                            item.to_value_type(),
+                        )
+                    );
                 }
             }
 
@@ -1856,25 +2034,101 @@ impl<T: ObjectType> ObjectExt for T {
     }
 }
 
+// Validate that the given property value has an acceptable type for the given property pspec
+// and if necessary update the value
+fn validate_property_type(
+    type_: Type,
+    allow_construct_only: bool,
+    pspec: &::ParamSpec,
+    property_value: &mut Value,
+) -> Result<(), BoolError> {
+    if !pspec.get_flags().contains(::ParamFlags::WRITABLE)
+        || (!allow_construct_only && pspec.get_flags().contains(::ParamFlags::CONSTRUCT_ONLY))
+    {
+        return Err(glib_bool_error!(
+            "property '{}' of type '{}' is not writable",
+            pspec.get_name(),
+            type_
+        ));
+    }
+
+    unsafe {
+        // While GLib actually allows all types that can somehow be transformed
+        // into the property type, we're more restrictive here to be consistent
+        // with Rust's type rules. We only allow the exact same type, or if the
+        // value type is a subtype of the property type
+        let valid_type: bool = from_glib(gobject_sys::g_type_check_value_holds(
+            mut_override(property_value.to_glib_none().0),
+            pspec.get_value_type().to_glib(),
+        ));
+
+        // If it's not directly a valid type but an object type, we check if the
+        // actual type of the contained object is compatible and if so create
+        // a properly typed Value. This can happen if the type field in the
+        // Value is set to a more generic type than the contained value
+        if !valid_type && property_value.type_().is_a(&Object::static_type()) {
+            match property_value.get::<Object>() {
+                Ok(Some(obj)) => {
+                    if obj.get_type().is_a(&pspec.get_value_type()) {
+                        property_value.0.g_type = pspec.get_value_type().to_glib();
+                    } else {
+                        return Err(
+                            glib_bool_error!(
+                                "property '{}' of type '{}' can't be set from the given object type (expected: '{}', got: '{}')",
+                                pspec.get_name(),
+                                type_,
+                                pspec.get_value_type(),
+                                obj.get_type(),
+                            )
+                        );
+                    }
+                }
+                Ok(None) => {
+                    // If the value is None then the type is compatible too
+                    property_value.0.g_type = pspec.get_value_type().to_glib();
+                }
+                Err(_) => unreachable!("property_value type conformity already checked"),
+            }
+        } else if !valid_type {
+            return Err(glib_bool_error!(format!(
+                "property '{}' of type '{}' can't be set from the given type (expected: '{}', got: '{}')",
+                pspec.get_name(),
+                type_,
+                pspec.get_value_type(),
+                property_value.type_(),
+            )));
+        }
+
+        let changed: bool = from_glib(gobject_sys::g_param_value_validate(
+            pspec.to_glib_none().0,
+            property_value.to_glib_none_mut().0,
+        ));
+        let change_allowed = pspec.get_flags().contains(::ParamFlags::LAX_VALIDATION);
+        if changed && !change_allowed {
+            return Err(glib_bool_error!(
+                "property '{}' of type '{}' can't be set from given value, it is invalid or out of range",
+                pspec.get_name(),
+                type_,
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 impl ObjectClass {
     pub fn has_property<'a, N: Into<&'a str>>(
         &self,
         property_name: N,
         type_: Option<Type>,
-    ) -> Result<(), BoolError> {
+    ) -> bool {
         let property_name = property_name.into();
         let ptype = self.get_property_type(property_name);
 
         match (ptype, type_) {
-            (None, _) => Err(glib_bool_error!("Invalid property name")),
-            (Some(_), None) => Ok(()),
-            (Some(ptype), Some(type_)) => {
-                if ptype == type_ {
-                    Ok(())
-                } else {
-                    Err(glib_bool_error!("Invalid property type"))
-                }
-            }
+            (None, _) => false,
+            (Some(_), None) => true,
+            (Some(ptype), Some(type_)) => ptype == type_,
         }
     }
 
@@ -1916,6 +2170,7 @@ glib_wrapper! {
     }
 }
 
+#[derive(Debug)]
 pub struct WeakRef<T: ObjectType>(Box<gobject_sys::GWeakRef>, PhantomData<*const T>);
 
 impl<T: ObjectType> WeakRef<T> {
@@ -1979,6 +2234,7 @@ unsafe impl<T: ObjectType + Send + Sync> Send for WeakRef<T> {}
 /// Trying to upgrade the weak reference from another thread than the one
 /// where it was created on will panic but dropping or cloning can be done
 /// safely from any thread.
+#[derive(Debug)]
 pub struct SendWeakRef<T: ObjectType>(WeakRef<T>, Option<usize>);
 
 impl<T: ObjectType> SendWeakRef<T> {
@@ -2029,6 +2285,7 @@ impl<T: ObjectType> From<WeakRef<T>> for SendWeakRef<T> {
 unsafe impl<T: ObjectType> Sync for SendWeakRef<T> {}
 unsafe impl<T: ObjectType> Send for SendWeakRef<T> {}
 
+#[derive(Debug)]
 pub struct BindingBuilder<'a> {
     source: &'a ObjectRef,
     source_property: &'a str,

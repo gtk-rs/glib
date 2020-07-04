@@ -12,7 +12,7 @@
 //!
 //! Although `GVariant` supports arbitrarily complex types, this binding is
 //! currently limited to the basic ones: `bool`, `u8`, `i16`, `u16`, `i32`,
-//! `u32`, `i64`, `u64`, `f64` and `&str`/`String`.
+//! `u32`, `i64`, `u64`, `f64`, `&str`/`String`, and [`VariantDict`](../struct.VariantDict.html).
 //!
 //! # Examples
 //!
@@ -38,6 +38,7 @@
 //! assert_eq!(num.get_str(), None);
 //! ```
 
+use bytes::Bytes;
 use glib_sys;
 use gobject_sys;
 use gstring::GString;
@@ -141,6 +142,42 @@ impl Variant {
             }
         }
     }
+
+    /// Constructs a new serialised-mode GVariant instance.
+    pub fn from_bytes<T: StaticVariantType>(bytes: &Bytes) -> Self {
+        unsafe {
+            from_glib_none(glib_sys::g_variant_new_from_bytes(
+                T::static_variant_type().as_ptr() as *const _,
+                bytes.to_glib_none().0,
+                false.to_glib(),
+            ))
+        }
+    }
+
+    /// Constructs a new serialised-mode GVariant instance.
+    ///
+    /// This is the same as `from_bytes`, except that checks on the passed
+    /// data are skipped.
+    ///
+    /// You should not use this function on data from external sources.
+    ///
+    /// # Safety
+    ///
+    /// Since the data is not validated, this is potentially dangerous if called
+    /// on bytes which are not guaranteed to have come from serialising another
+    /// Variant.  The caller is responsible for ensuring bad data is not passed in.
+    pub unsafe fn from_bytes_trusted<T: StaticVariantType>(bytes: &Bytes) -> Self {
+        from_glib_none(glib_sys::g_variant_new_from_bytes(
+            T::static_variant_type().as_ptr() as *const _,
+            bytes.to_glib_none().0,
+            true.to_glib(),
+        ))
+    }
+
+    /// Returns the serialised form of a GVariant instance.
+    pub fn get_data_as_bytes(&self) -> Bytes {
+        unsafe { from_glib_full(glib_sys::g_variant_get_data_as_bytes(self.to_glib_none().0)) }
+    }
 }
 
 unsafe impl Send for Variant {}
@@ -198,13 +235,8 @@ impl PartialOrd for Variant {
                 self.to_glib_none().0 as *const _,
                 other.to_glib_none().0 as *const _,
             );
-            if res < 0 {
-                Some(Ordering::Less)
-            } else if res > 0 {
-                Some(Ordering::Equal)
-            } else {
-                Some(Ordering::Greater)
-            }
+
+            Some(res.cmp(&0))
         }
     }
 }
@@ -400,7 +432,7 @@ mod tests {
     fn test_string() {
         let s = String::from("this is a test");
         let v = Variant::from(s.clone());
-        assert_eq!(v.get(), Some(s.clone()));
+        assert_eq!(v.get(), Some(s));
     }
 
     #[test]

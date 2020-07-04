@@ -9,7 +9,6 @@ use std::boxed::Box as Box_;
 use std::mem;
 use std::ptr;
 use translate::*;
-use types;
 use Bytes;
 use ChecksumType;
 use Error;
@@ -201,8 +200,18 @@ pub fn clear_error() -> Result<(), Error> {
 //    unsafe { TODO: call glib_sys:g_clear_handle_id() }
 //}
 
+//#[cfg(any(feature = "v2_64", feature = "dox"))]
+//pub fn clear_list(list_ptr: /*Unimplemented*/&[&Fundamental: Pointer]) {
+//    unsafe { TODO: call glib_sys:g_clear_list() }
+//}
+
 //pub fn clear_pointer(pp: /*Unimplemented*/Fundamental: Pointer) {
 //    unsafe { TODO: call glib_sys:g_clear_pointer() }
+//}
+
+//#[cfg(any(feature = "v2_64", feature = "dox"))]
+//pub fn clear_slist(slist_ptr: /*Unimplemented*/&[&Fundamental: Pointer]) {
+//    unsafe { TODO: call glib_sys:g_clear_slist() }
 //}
 
 pub fn compute_checksum_for_bytes(checksum_type: ChecksumType, data: &Bytes) -> Option<GString> {
@@ -621,6 +630,11 @@ pub fn get_num_processors() -> u32 {
     unsafe { glib_sys::g_get_num_processors() }
 }
 
+#[cfg(any(feature = "v2_64", feature = "dox"))]
+pub fn get_os_info(key_name: &str) -> Option<GString> {
+    unsafe { from_glib_full(glib_sys::g_get_os_info(key_name.to_glib_none().0)) }
+}
+
 pub fn get_real_time() -> i64 {
     unsafe { glib_sys::g_get_real_time() }
 }
@@ -721,86 +735,36 @@ pub fn listenv() -> Vec<std::ffi::OsString> {
     unsafe { FromGlibPtrContainer::from_glib_full(glib_sys::g_listenv()) }
 }
 
-//pub fn log(log_domain: Option<&str>, log_level: /*Ignored*/LogLevelFlags, format: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) {
-//    unsafe { TODO: call glib_sys:g_log() }
-//}
-
-//pub fn log_default_handler(log_domain: Option<&str>, log_level: /*Ignored*/LogLevelFlags, message: Option<&str>, unused_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
-//    unsafe { TODO: call glib_sys:g_log_default_handler() }
-//}
-
-pub fn log_remove_handler(log_domain: &str, handler_id: u32) {
-    unsafe {
-        glib_sys::g_log_remove_handler(log_domain.to_glib_none().0, handler_id);
-    }
-}
-
-//pub fn log_set_always_fatal(fatal_mask: /*Ignored*/LogLevelFlags) -> /*Ignored*/LogLevelFlags {
-//    unsafe { TODO: call glib_sys:g_log_set_always_fatal() }
-//}
-
-//pub fn log_set_default_handler(log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str) {
-//    unsafe { TODO: call glib_sys:g_log_set_default_handler() }
-//}
-
-//pub fn log_set_fatal_mask(log_domain: &str, fatal_mask: /*Ignored*/LogLevelFlags) -> /*Ignored*/LogLevelFlags {
-//    unsafe { TODO: call glib_sys:g_log_set_fatal_mask() }
-//}
-
-//pub fn log_set_handler(log_domain: Option<&str>, log_levels: /*Ignored*/LogLevelFlags, log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
-//    unsafe { TODO: call glib_sys:g_log_set_handler() }
-//}
-
-//#[cfg(any(feature = "v2_46", feature = "dox"))]
-//pub fn log_set_handler_full(log_domain: Option<&str>, log_levels: /*Ignored*/LogLevelFlags, log_func: /*Unimplemented*/Fn(&str, /*Ignored*/LogLevelFlags, &str), user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> u32 {
-//    unsafe { TODO: call glib_sys:g_log_set_handler_full() }
-//}
-
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_set_writer_func(func: /*Unimplemented*/Fn(/*Ignored*/LogLevelFlags, /*Ignored*/Vec<LogField>, usize) -> /*Ignored*/LogWriterOutput, user_data: /*Unimplemented*/Option<Fundamental: Pointer>) {
-//    unsafe { TODO: call glib_sys:g_log_set_writer_func() }
-//}
-
-//#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_structured(log_domain: &str, log_level: /*Ignored*/LogLevelFlags, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) {
-//    unsafe { TODO: call glib_sys:g_log_structured() }
-//}
-
-//#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_structured_array(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField]) {
+//pub fn log_structured_array(log_level: LogLevelFlags, fields: /*Ignored*/&[&LogField]) {
 //    unsafe { TODO: call glib_sys:g_log_structured_array() }
 //}
 
-//pub fn log_structured_standard(log_domain: &str, log_level: /*Ignored*/LogLevelFlags, file: &str, line: &str, func: &str, message_format: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) {
+//pub fn log_structured_standard(log_domain: &str, log_level: LogLevelFlags, file: &str, line: &str, func: &str, message_format: &str, : /*Unknown conversion*//*Unimplemented*/Fundamental: VarArgs) {
 //    unsafe { TODO: call glib_sys:g_log_structured_standard() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_variant(log_domain: Option<&str>, log_level: /*Ignored*/LogLevelFlags, fields: &Variant) {
-//    unsafe { TODO: call glib_sys:g_log_variant() }
-//}
-
-//#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_default(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
+//pub fn log_writer_default(log_level: LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
 //    unsafe { TODO: call glib_sys:g_log_writer_default() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_format_fields(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], use_color: bool) -> Option<GString> {
+//pub fn log_writer_format_fields(log_level: LogLevelFlags, fields: /*Ignored*/&[&LogField], use_color: bool) -> Option<GString> {
 //    unsafe { TODO: call glib_sys:g_log_writer_format_fields() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_journald(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
+//pub fn log_writer_journald(log_level: LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
 //    unsafe { TODO: call glib_sys:g_log_writer_journald() }
 //}
 
 //#[cfg(any(feature = "v2_50", feature = "dox"))]
-//pub fn log_writer_standard_streams(log_level: /*Ignored*/LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
+//pub fn log_writer_standard_streams(log_level: LogLevelFlags, fields: /*Ignored*/&[&LogField], user_data: /*Unimplemented*/Option<Fundamental: Pointer>) -> /*Ignored*/LogWriterOutput {
 //    unsafe { TODO: call glib_sys:g_log_writer_standard_streams() }
 //}
 
-//pub fn logv(log_domain: Option<&str>, log_level: /*Ignored*/LogLevelFlags, format: &str, args: /*Unknown conversion*//*Unimplemented*/Unsupported) {
+//pub fn logv(log_domain: Option<&str>, log_level: LogLevelFlags, format: &str, args: /*Unknown conversion*//*Unimplemented*/Unsupported) {
 //    unsafe { TODO: call glib_sys:g_logv() }
 //}
 
@@ -1288,6 +1252,12 @@ pub fn stpcpy(dest: &str, src: &str) -> Option<GString> {
 //    unsafe { TODO: call glib_sys:g_unicode_script_to_iso15924() }
 //}
 
+//#[cfg(any(unix, feature = "dox"))]
+//#[cfg(any(feature = "v2_64", feature = "dox"))]
+//pub fn unix_get_passwd_entry(user_name: &str) -> Result</*Unimplemented*/Option<Fundamental: Pointer>, Error> {
+//    unsafe { TODO: call glib_sys:g_unix_get_passwd_entry() }
+//}
+
 pub fn unlink<P: AsRef<std::path::Path>>(filename: P) -> i32 {
     unsafe { glib_sys::g_unlink(filename.as_ref().to_glib_none().0) }
 }
@@ -1356,12 +1326,8 @@ pub fn uuid_string_is_valid(str: &str) -> bool {
 }
 
 #[cfg(any(feature = "v2_52", feature = "dox"))]
-pub fn uuid_string_random() -> Option<GString> {
+pub fn uuid_string_random() -> GString {
     unsafe { from_glib_full(glib_sys::g_uuid_string_random()) }
-}
-
-pub fn variant_get_gtype() -> types::Type {
-    unsafe { from_glib(glib_sys::g_variant_get_gtype()) }
 }
 
 //pub fn vasprintf(string: &str, format: &str, args: /*Unknown conversion*//*Unimplemented*/Unsupported) -> i32 {
