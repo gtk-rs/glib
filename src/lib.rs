@@ -90,7 +90,7 @@ pub extern crate glib_sys;
 pub extern crate gobject_sys;
 
 extern crate glib_macros;
-pub use glib_macros::{gflags, GBoxed, GEnum};
+pub use glib_macros::{clone, gflags, GBoxed, GEnum};
 
 extern crate futures_channel;
 extern crate futures_core;
@@ -134,6 +134,17 @@ pub mod shared;
 pub mod error;
 #[macro_use]
 pub mod object;
+#[macro_use]
+mod log;
+#[cfg(any(feature = "v2_46", feature = "dox"))]
+pub use log::log_set_handler;
+// #[cfg(any(feature = "v2_50", feature = "dox"))]
+// pub use log::log_variant;
+pub use log::{
+    log_default_handler, log_remove_handler, log_set_always_fatal, log_set_default_handler,
+    log_set_fatal_mask, log_unset_default_handler, set_print_handler, set_printerr_handler,
+    unset_print_handler, unset_printerr_handler, LogHandlerId, LogLevel, LogLevels,
+};
 
 pub use auto::functions::*;
 pub use auto::*;
