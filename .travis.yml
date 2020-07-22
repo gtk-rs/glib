@@ -15,10 +15,10 @@ matrix:
       rust: beta
       env: GTK=3.24 FEATURES="v2_48 log_macros"
     - os: linux
-      rust: 1.40.0
+      rust: 1.46.0
       env: GTK=3.14 FEATURES=
     - os: linux
-      rust: 1.40.0
+      rust: 1.46.0
       env: GTK=3.24 FEATURES="v2_48 log_macros"
     - os: linux
       rust: stable
@@ -39,10 +39,10 @@ matrix:
     #   rust: beta
     #   env: GTK=3.24 FEATURES=v2_48
     - os: osx
-      rust: 1.40.0
+      rust: 1.46.0
       env: GTK=3.14 FEATURES=
     # - os: osx
-    #   rust: 1.40.0
+    #   rust: 1.46.0
     #   env: GTK=3.24 FEATURES=v2_48
     - os: osx
       rust: stable
