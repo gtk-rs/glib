@@ -8,22 +8,25 @@
 use super::prelude::*;
 use glib_sys;
 use gobject_sys;
-use std::borrow::Borrow;
-use std::fmt;
 use std::mem;
 use std::ptr;
 use translate::*;
-use {Object, ObjectClass, ObjectType, SignalFlags, Type, Value};
+use {Object, ObjectClass, ObjectType, ParamSpec, SignalFlags, Type, Value};
 
 /// Trait for implementors of `glib::Object` subclasses.
 ///
 /// This allows overriding the virtual methods of `glib::Object`.
 pub trait ObjectImpl: ObjectSubclass + ObjectImplExt {
+    /// Properties installed for this type.
+    fn properties() -> Vec<ParamSpec> {
+        vec![]
+    }
+
     /// Property setter.
     ///
     /// This is called whenever the property of this specific subclass with the
     /// given index is set. The new value is passed as `glib::Value`.
-    fn set_property(&self, _obj: &Object, _id: usize, _value: &Value) {
+    fn set_property(&self, _obj: &Object, _id: usize, _value: &Value, _pspec: &ParamSpec) {
         unimplemented!()
     }
 
@@ -31,7 +34,7 @@ pub trait ObjectImpl: ObjectSubclass + ObjectImplExt {
     ///
     /// This is called whenever the property value of the specific subclass with the
     /// given index should be returned.
-    fn get_property(&self, _obj: &Object, _id: usize) -> Result<Value, ()> {
+    fn get_property(&self, _obj: &Object, _id: usize, _pspec: &ParamSpec) -> Result<Value, ()> {
         unimplemented!()
     }
 
@@ -49,12 +52,16 @@ unsafe extern "C" fn get_property<T: ObjectImpl>(
     obj: *mut gobject_sys::GObject,
     id: u32,
     value: *mut gobject_sys::GValue,
-    _pspec: *mut gobject_sys::GParamSpec,
+    pspec: *mut gobject_sys::GParamSpec,
 ) {
     let instance = &*(obj as *mut T::Instance);
     let imp = instance.get_impl();
 
-    match imp.get_property(&from_glib_borrow(obj), (id - 1) as usize) {
+    match imp.get_property(
+        &from_glib_borrow(obj),
+        (id - 1) as usize,
+        &from_glib_borrow(pspec),
+    ) {
         Ok(v) => {
             // We first unset the value we get passed in, in case it contained
             // any previous data. Then we directly overwrite it with our new
@@ -76,7 +83,7 @@ unsafe extern "C" fn set_property<T: ObjectImpl>(
     obj: *mut gobject_sys::GObject,
     id: u32,
     value: *mut gobject_sys::GValue,
-    _pspec: *mut gobject_sys::GParamSpec,
+    pspec: *mut gobject_sys::GParamSpec,
 ) {
     let instance = &*(obj as *mut T::Instance);
     let imp = instance.get_impl();
@@ -84,6 +91,7 @@ unsafe extern "C" fn set_property<T: ObjectImpl>(
         &from_glib_borrow(obj),
         (id - 1) as usize,
         &*(value as *mut Value),
+        &from_glib_borrow(pspec),
     );
 }
 
@@ -94,54 +102,10 @@ unsafe extern "C" fn constructed<T: ObjectImpl>(obj: *mut gobject_sys::GObject) 
     imp.constructed(&from_glib_borrow(obj));
 }
 
-/// Definition of a property.
-#[derive(Clone)]
-pub struct Property<'a>(pub &'a str, pub fn(&str) -> ::ParamSpec);
-
-impl<'a> fmt::Debug for Property<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_tuple("Property").field(&self.0).finish()
-    }
-}
-
 /// Extension trait for `glib::Object`'s class struct.
 ///
 /// This contains various class methods and allows subclasses to override the virtual methods.
 pub unsafe trait ObjectClassSubclassExt: Sized + 'static {
-    /// Install properties on the subclass.
-    ///
-    /// The index in the properties array is going to be the index passed to the
-    /// property setters and getters.
-    fn install_properties<'a, T: Borrow<Property<'a>>>(&mut self, properties: &[T]) {
-        if properties.is_empty() {
-            return;
-        }
-
-        let mut pspecs = Vec::with_capacity(properties.len());
-
-        for property in properties {
-            let property = property.borrow();
-            let pspec = (property.1)(property.0);
-            pspecs.push(pspec);
-        }
-
-        unsafe {
-            let mut pspecs_ptrs = Vec::with_capacity(properties.len());
-
-            pspecs_ptrs.push(ptr::null_mut());
-
-            for pspec in &pspecs {
-                pspecs_ptrs.push(pspec.to_glib_none().0);
-            }
-
-            gobject_sys::g_object_class_install_properties(
-                self as *mut _ as *mut gobject_sys::GObjectClass,
-                pspecs_ptrs.len() as u32,
-                pspecs_ptrs.as_mut_ptr(),
-            );
-        }
-    }
-
     /// Add a new signal to the subclass.
     ///
     /// This can be emitted later by `glib::Object::emit` and external code
@@ -277,6 +241,25 @@ unsafe impl<T: ObjectImpl> IsSubclassable<T> for ObjectClass {
             klass.get_property = Some(get_property::<T>);
             klass.constructed = Some(constructed::<T>);
         }
+
+        let pspecs = <T as ObjectImpl>::properties();
+        if !pspecs.is_empty() {
+            unsafe {
+                let mut pspecs_ptrs = Vec::with_capacity(pspecs.len() + 1);
+
+                pspecs_ptrs.push(ptr::null_mut());
+
+                for pspec in &pspecs {
+                    pspecs_ptrs.push(pspec.to_glib_none().0);
+                }
+
+                gobject_sys::g_object_class_install_properties(
+                    self as *mut _ as *mut gobject_sys::GObjectClass,
+                    pspecs_ptrs.len() as u32,
+                    pspecs_ptrs.as_mut_ptr(),
+                );
+            }
+        }
     }
 }
 
@@ -351,45 +334,6 @@ mod test {
         }
     }
 
-    static PROPERTIES: [Property; 4] = [
-        Property("name", |name| {
-            ::ParamSpec::string(
-                name,
-                "Name",
-                "Name of this object",
-                None,
-                ::ParamFlags::READWRITE,
-            )
-        }),
-        Property("construct-name", |name| {
-            ::ParamSpec::string(
-                name,
-                "Construct Name",
-                "Construct Name of this object",
-                None,
-                ::ParamFlags::READWRITE | ::ParamFlags::CONSTRUCT_ONLY,
-            )
-        }),
-        Property("constructed", |name| {
-            ::ParamSpec::boolean(
-                name,
-                "Constructed",
-                "True if the constructed() virtual method was called",
-                false,
-                ::ParamFlags::READABLE,
-            )
-        }),
-        Property("child", |name| {
-            ::ParamSpec::object(
-                name,
-                "Child",
-                "Child object",
-                ChildObject::static_type(),
-                ::ParamFlags::READWRITE,
-            )
-        }),
-    ];
-
     pub struct SimpleObject {
         name: RefCell<Option<String>>,
         construct_name: RefCell<Option<String>>,
@@ -408,9 +352,7 @@ mod test {
             type_.add_interface::<DummyInterface>();
         }
 
-        fn class_init(klass: &mut subclass::simple::ClassStruct<Self>) {
-            klass.install_properties(&PROPERTIES);
-
+        fn class_init(klass: &mut Self::Class) {
             klass.add_signal(
                 "name-changed",
                 SignalFlags::RUN_LAST,
@@ -469,11 +411,42 @@ mod test {
     }
 
     impl ObjectImpl for SimpleObject {
-        fn set_property(&self, obj: &Object, id: usize, value: &Value) {
-            let prop = &PROPERTIES[id];
+        fn properties() -> Vec<::ParamSpec> {
+            vec![
+                ::ParamSpec::string(
+                    "name",
+                    "Name",
+                    "Name of this object",
+                    None,
+                    ::ParamFlags::READWRITE,
+                ),
+                ::ParamSpec::string(
+                    "construct-name",
+                    "Construct Name",
+                    "Construct Name of this object",
+                    None,
+                    ::ParamFlags::READWRITE | ::ParamFlags::CONSTRUCT_ONLY,
+                ),
+                ::ParamSpec::boolean(
+                    "constructed",
+                    "Constructed",
+                    "True if the constructed() virtual method was called",
+                    false,
+                    ::ParamFlags::READABLE,
+                ),
+                ::ParamSpec::object(
+                    "child",
+                    "Child",
+                    "Child object",
+                    ChildObject::static_type(),
+                    ::ParamFlags::READWRITE,
+                ),
+            ]
+        }
 
-            match *prop {
-                Property("name", ..) => {
+        fn set_property(&self, obj: &Object, _id: usize, value: &Value, pspec: &::ParamSpec) {
+            match pspec.get_name() {
+                "name" => {
                     let name = value
                         .get()
                         .expect("type conformity checked by 'Object::set_property'");
@@ -481,26 +454,29 @@ mod test {
                     obj.emit("name-changed", &[&*self.name.borrow()])
                         .expect("Failed to borrow name");
                 }
-                Property("construct-name", ..) => {
+                "construct-name" => {
                     let name = value
                         .get()
                         .expect("type conformity checked by 'Object::set_property'");
                     self.construct_name.replace(name);
                 }
-                Property("child", ..) => {
+                "child" => {
                     // not stored, only used to test `set_property` with `Objects`
                 }
                 _ => unimplemented!(),
             }
         }
 
-        fn get_property(&self, _obj: &Object, id: usize) -> Result<Value, ()> {
-            let prop = &PROPERTIES[id];
-
-            match *prop {
-                Property("name", ..) => Ok(self.name.borrow().to_value()),
-                Property("construct-name", ..) => Ok(self.construct_name.borrow().to_value()),
-                Property("constructed", ..) => Ok(self.constructed.borrow().to_value()),
+        fn get_property(
+            &self,
+            _obj: &Object,
+            _id: usize,
+            pspec: &::ParamSpec,
+        ) -> Result<Value, ()> {
+            match pspec.get_name() {
+                "name" => Ok(self.name.borrow().to_value()),
+                "construct-name" => Ok(self.construct_name.borrow().to_value()),
+                "constructed" => Ok(self.constructed.borrow().to_value()),
                 _ => unimplemented!(),
             }
         }

@@ -2,14 +2,13 @@
 // See the COPYRIGHT file at the top-level directory of this distribution.
 // Licensed under the MIT license, see the LICENSE file or <https://opensource.org/licenses/MIT>
 
-use super::{InitializingType, Property};
+use super::InitializingType;
 use glib_sys;
 use gobject_sys;
-use std::borrow::Borrow;
 use std::marker;
 use std::mem;
 use translate::*;
-use {IsA, Object, ObjectExt, SignalFlags, StaticType, Type, Value};
+use {IsA, Object, ObjectExt, ParamSpec, SignalFlags, StaticType, Type, Value};
 
 impl<T: ObjectInterface> InitializingType<T> {
     /// Adds an interface prerequisite for `I` to the type.
@@ -90,12 +89,18 @@ pub trait ObjectInterface: Sized + 'static {
     ///
     /// This is called after `type_init` and before the first implementor
     /// of the interface is created. Interfaces can use this to do interface-
-    /// specific initialization, e.g. for installing properties or signals
-    /// on the interface, and for setting default implementations of interface
-    /// functions.
+    /// specific initialization, e.g. for installing signals on the interface,
+    /// and for setting default implementations of interface functions.
     ///
     /// Optional
     fn interface_init(&mut self) {}
+
+    /// Properties installed for this interface.
+    ///
+    /// All implementors of the interface must provide these properties.
+    fn properties() -> Vec<ParamSpec> {
+        vec![]
+    }
 }
 
 pub trait ObjectInterfaceExt: ObjectInterface {
@@ -111,26 +116,6 @@ pub trait ObjectInterfaceExt: ObjectInterface {
                 gobject_sys::g_type_interface_peek(klass as *mut _, Self::get_type().to_glib());
             assert!(!interface.is_null());
             &*(interface as *const Self)
-        }
-    }
-
-    /// Install properties on the interface.
-    ///
-    /// All implementors of the interface must provide these properties.
-    fn install_properties<'a, T: Borrow<Property<'a>>>(&mut self, properties: &[T]) {
-        if properties.is_empty() {
-            return;
-        }
-
-        for property in properties {
-            let property = property.borrow();
-            let pspec = (property.1)(property.0);
-            unsafe {
-                gobject_sys::g_object_interface_install_property(
-                    self as *mut Self as *mut _,
-                    pspec.to_glib_none().0,
-                );
-            }
         }
     }
 
@@ -253,6 +238,15 @@ unsafe extern "C" fn interface_init<T: ObjectInterface>(
     _klass_data: glib_sys::gpointer,
 ) {
     let iface = &mut *(klass as *mut T);
+
+    let pspecs = <T as ObjectInterface>::properties();
+    for pspec in pspecs {
+        gobject_sys::g_object_interface_install_property(
+            iface as *mut T as *mut _,
+            pspec.to_glib_none().0,
+        );
+    }
+
     iface.interface_init();
 }
 
