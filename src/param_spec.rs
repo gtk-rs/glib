@@ -131,7 +131,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_boolean(
+            from_glib_none(gobject_sys::g_param_spec_boolean(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -149,7 +149,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_boxed(
+            from_glib_none(gobject_sys::g_param_spec_boxed(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -169,7 +169,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_char(
+            from_glib_none(gobject_sys::g_param_spec_char(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -191,7 +191,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_double(
+            from_glib_none(gobject_sys::g_param_spec_double(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -212,7 +212,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_enum(
+            from_glib_none(gobject_sys::g_param_spec_enum(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -232,7 +232,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_flags(
+            from_glib_none(gobject_sys::g_param_spec_flags(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -253,7 +253,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_float(
+            from_glib_none(gobject_sys::g_param_spec_float(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -273,7 +273,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_gtype(
+            from_glib_none(gobject_sys::g_param_spec_gtype(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -293,7 +293,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_int(
+            from_glib_none(gobject_sys::g_param_spec_int(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -315,7 +315,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_int64(
+            from_glib_none(gobject_sys::g_param_spec_int64(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -337,7 +337,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_long(
+            from_glib_none(gobject_sys::g_param_spec_long(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -357,7 +357,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_object(
+            from_glib_none(gobject_sys::g_param_spec_object(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -384,7 +384,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_param(
+            from_glib_none(gobject_sys::g_param_spec_param(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -396,7 +396,7 @@ impl ParamSpec {
 
     pub fn pointer(name: &str, nick: &str, blurb: &str, flags: ParamFlags) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_pointer(
+            from_glib_none(gobject_sys::g_param_spec_pointer(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -414,7 +414,7 @@ impl ParamSpec {
     ) -> ParamSpec {
         let default_value = default_value.to_glib_none();
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_string(
+            from_glib_none(gobject_sys::g_param_spec_string(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -434,7 +434,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_uchar(
+            from_glib_none(gobject_sys::g_param_spec_uchar(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -456,7 +456,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_uint(
+            from_glib_none(gobject_sys::g_param_spec_uint(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -478,7 +478,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_uint64(
+            from_glib_none(gobject_sys::g_param_spec_uint64(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -500,7 +500,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_ulong(
+            from_glib_none(gobject_sys::g_param_spec_ulong(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
@@ -520,7 +520,7 @@ impl ParamSpec {
         flags: ParamFlags,
     ) -> ParamSpec {
         unsafe {
-            from_glib_full(gobject_sys::g_param_spec_unichar(
+            from_glib_none(gobject_sys::g_param_spec_unichar(
                 name.to_glib_none().0,
                 nick.to_glib_none().0,
                 blurb.to_glib_none().0,
