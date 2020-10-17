@@ -11,7 +11,6 @@ deprecate_by_min_version = true
 
 generate = [
     "GObject.BindingFlags",
-    "GObject.ParamFlags",
     "GObject.SignalFlags",
 ]
 
@@ -21,6 +20,7 @@ ignore = [
 manual = [
     "GObject.Object",
     "GObject.Value",
+    "GObject.ParamFlags",
 ]
 
 [[object]]

@@ -5,6 +5,8 @@
 //! GObject bindings
 
 pub mod auto;
+pub mod flags;
 
 pub use self::auto::*;
+pub use self::flags::*;
 //pub use self::auto::functions::*;
