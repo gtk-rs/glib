@@ -104,7 +104,7 @@ pub use closure::Closure;
 pub use error::{BoolError, Error};
 pub use file_error::FileError;
 pub use object::{
-    Cast, InitiallyUnowned, InitiallyUnownedClass, IsA, IsClassFor, Object, ObjectClass, ObjectExt,
+    Cast, InitiallyUnowned, InitiallyUnownedClass, IsA, Object, ObjectClass, ObjectExt,
     ObjectType, SendWeakRef, WeakRef,
 };
 pub use signal::{
