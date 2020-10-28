@@ -165,7 +165,12 @@ pub fn impl_genum(input: &syn::DeriveInput) -> TokenStream {
 
                 let name = std::ffi::CString::new(#gtype_name).expect("CString::new failed");
                 unsafe {
-                    let type_ = #crate_ident::gobject_sys::g_enum_register_static(name.as_ptr(), VALUES.as_ptr());
+                    // Lookup the type ID or return 0 if it has not yet been registered under the specific name
+                    let mut type_ = #crate_ident::gobject_sys::g_type_from_name(name.as_pr());
+                    if type_ == 0 {
+                        // Register the type ONLY if not done before
+                        type_ = #crate_ident::gobject_sys::g_enum_register_static(name.as_ptr(), VALUES.as_ptr());
+                    }
                     TYPE = #crate_ident::translate::from_glib(type_);
                 }
             });
