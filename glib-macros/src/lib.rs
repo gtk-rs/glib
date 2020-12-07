@@ -8,10 +8,13 @@ mod gboxed_derive;
 mod genum_derive;
 mod gflags_attribute;
 mod utils;
+mod downgrade_enum;
+mod downgrade_fields;
+mod downgrade_struct;
 
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
-use syn::{parse_macro_input, DeriveInput, LitStr};
+use syn::{parse_macro_input, Data, DeriveInput, LitStr};
 
 #[proc_macro_derive(GEnum, attributes(genum))]
 #[proc_macro_error]
@@ -84,4 +87,18 @@ pub fn gflags(attr: TokenStream, item: TokenStream) -> TokenStream {
     let gtype_name = parse_macro_input!(attr as LitStr);
     let gen = gflags_attribute::impl_gflags(&input, &gtype_name);
     gen.into()
+}
+
+#[proc_macro_derive(Downgrade)]
+pub fn downgrade(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    match input.data {
+        Data::Struct(data) => {
+            downgrade_struct::derive_downgrade_for_struct(input.ident, input.generics, data)
+        }
+        Data::Enum(data) => downgrade_enum::derive_downgrade_for_enum(input.ident, data),
+        Data::Union(..) => {
+            panic!("#[derive(Downgrade)] is not available for unions.");
+        }
+    }
 }

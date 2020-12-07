@@ -1,11 +1,12 @@
 extern crate glib;
 
 use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::panic;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use glib::clone;
+use glib::{clone, Downgrade, Object};
 
 struct State {
     count: i32,
@@ -169,4 +170,28 @@ mod import_rename {
 
         closure(0, 0);
     }
+}
+
+#[test]
+fn derive_downgrade() {
+    #[derive(Downgrade)]
+    pub struct NewType(Object);
+
+    #[derive(Downgrade)]
+    pub struct Struct {
+        o1: Object,
+        o2: std::rc::Rc<u32>,
+    }
+
+    #[derive(Downgrade)]
+    pub enum Enum {
+        None,
+        Pair { x: Object, y: Object },
+        Unit(),
+        SingleUnnamed(Object),
+        MultipleUnnamed(Object, Object, Object),
+    }
+
+    #[derive(Downgrade)]
+    pub struct TypedWrapper<T>(Object, PhantomData<T>);
 }
