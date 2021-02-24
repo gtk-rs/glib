@@ -33,7 +33,7 @@ macro_rules! glib_object_interface {
     () => {
         fn get_type() -> $crate::Type {
             static ONCE: ::std::sync::Once = ::std::sync::Once::new();
-            static mut TYPE: $crate::Type = $crate::Type::Invalid;
+            static mut TYPE: $crate::Type = $crate::Type::INVALID;
 
             ONCE.call_once(|| {
                 let type_ = $crate::subclass::register_interface::<Self>();
@@ -43,8 +43,7 @@ macro_rules! glib_object_interface {
             });
 
             unsafe {
-                assert_ne!(TYPE, $crate::Type::Invalid);
-
+                assert!(TYPE.is_valid());
                 TYPE
             }
         }
@@ -275,7 +274,7 @@ pub fn register_interface<T: ObjectInterface>() -> Type {
         );
 
         let type_ = from_glib(gobject_sys::g_type_register_static_simple(
-            Type::BaseInterface.to_glib(),
+            Type::BASE_INTERFACE.to_glib(),
             type_name.as_ptr(),
             mem::size_of::<T>() as u32,
             Some(interface_init::<T>),

@@ -18,71 +18,90 @@ use std::ptr;
 
 /// A GLib or GLib-based library type
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Type {
-    /// An invalid `Type` used as error return value in some functions
-    Invalid,
-    /// The fundamental type corresponding to the unit type `()`
-    Unit,
-    /// The fundamental type corresponding to `i8`
-    I8,
-    /// The fundamental type corresponding to `u8`
-    U8,
-    /// The fundamental type corresponding to `bool`
-    Bool,
-    /// The fundamental type corresponding to `i32`
-    I32,
-    /// The fundamental type corresponding to `u32`
-    U32,
-    /// The fundamental type corresponding to C `long`
-    ILong,
-    /// The fundamental type corresponding to C `unsigned long`
-    ULong,
-    /// The fundamental type corresponding to `i64`
-    I64,
-    /// The fundamental type corresponding to `u64`
-    U64,
-    /// The fundamental type corresponding to `f32`
-    F32,
-    /// The fundamental type corresponding to `f64`
-    F64,
-    /// The fundamental type corresponding to `String`
-    String,
-    /// The fundamental type corresponding to a pointer
-    Pointer,
-    /// The fundamental type of GVariant
-    Variant,
-    /// The fundamental type from which all interfaces are derived
-    BaseInterface,
-    /// The fundamental type from which all enumeration types are derived
-    BaseEnum,
-    /// The fundamental type from which all flags types are derived
-    BaseFlags,
-    /// The fundamental type from which all boxed types are derived
-    BaseBoxed,
-    /// The fundamental type from which all `GParamSpec` types are derived
-    BaseParamSpec,
-    /// The fundamental type from which all objects are derived
-    BaseObject,
-    /// A non-fundamental type identified by value of type `usize`
-    Other(usize),
-}
+pub struct Type(glib_sys::GType);
 
 impl Type {
+    /// An invalid `Type` used as error return value in some functions
+    pub const INVALID: Self = Self(gobject_sys::G_TYPE_INVALID);
+
+    /// The fundamental type corresponding to the unit type `()`
+    pub const UNIT: Self = Self(gobject_sys::G_TYPE_NONE);
+
+    /// The fundamental type corresponding to `i8`
+    pub const I8: Self = Self(gobject_sys::G_TYPE_CHAR);
+
+    /// The fundamental type corresponding to `u8`
+    pub const U8: Self = Self(gobject_sys::G_TYPE_UCHAR);
+
+    /// The fundamental type corresponding to `bool`
+    pub const BOOL: Self = Self(gobject_sys::G_TYPE_BOOLEAN);
+
+    /// The fundamental type corresponding to `i32`
+    pub const I32: Self = Self(gobject_sys::G_TYPE_INT);
+
+    /// The fundamental type corresponding to `u32`
+    pub const U32: Self = Self(gobject_sys::G_TYPE_UINT);
+
+    /// The fundamental type corresponding to C `long`
+    pub const I_LONG: Self = Self(gobject_sys::G_TYPE_LONG);
+
+    /// The fundamental type corresponding to C `unsigned long`
+    pub const U_LONG: Self = Self(gobject_sys::G_TYPE_ULONG);
+
+    /// The fundamental type corresponding to `i64`
+    pub const I64: Self = Self(gobject_sys::G_TYPE_INT64);
+
+    /// The fundamental type corresponding to `u64`
+    pub const U64: Self = Self(gobject_sys::G_TYPE_UINT64);
+
+    /// The fundamental type corresponding to `f32`
+    pub const F32: Self = Self(gobject_sys::G_TYPE_FLOAT);
+
+    /// The fundamental type corresponding to `f64`
+    pub const F64: Self = Self(gobject_sys::G_TYPE_DOUBLE);
+
+    /// The fundamental type corresponding to `String`
+    pub const STRING: Self = Self(gobject_sys::G_TYPE_STRING);
+
+    /// The fundamental type corresponding to a pointer
+    pub const POINTER: Self = Self(gobject_sys::G_TYPE_POINTER);
+
+    /// The fundamental type of GVariant
+    pub const VARIANT: Self = Self(gobject_sys::G_TYPE_VARIANT);
+
+    /// The fundamental type from which all interfaces are derived
+    pub const BASE_INTERFACE: Self = Self(gobject_sys::G_TYPE_INTERFACE);
+
+    /// The fundamental type from which all enumeration types are derived
+    pub const BASE_ENUM: Self = Self(gobject_sys::G_TYPE_ENUM);
+
+    /// The fundamental type from which all flags types are derived
+    pub const BASE_FLAGS: Self = Self(gobject_sys::G_TYPE_FLAGS);
+
+    /// The fundamental type from which all boxed types are derived
+    pub const BASE_BOXED: Self = Self(gobject_sys::G_TYPE_BOXED);
+
+    /// The fundamental type from which all `GParamSpec` types are derived
+    pub const BASE_PARAM_SPEC: Self = Self(gobject_sys::G_TYPE_PARAM);
+
+    /// The fundamental type from which all objects are derived
+    pub const BASE_OBJECT: Self = Self(gobject_sys::G_TYPE_OBJECT);
+
     pub fn name(&self) -> String {
-        match self {
-            Type::Invalid => "<invalid>".to_string(),
+        match self.0 {
+            gobject_sys::G_TYPE_INVALID => "<invalid>".into(),
             _ => unsafe { from_glib_none(gobject_sys::g_type_name(self.to_glib())) },
         }
     }
 
     pub fn qname(&self) -> ::Quark {
-        match self {
-            Type::Invalid => ::Quark::from_string("<invalid>"),
+        match self.0 {
+            gobject_sys::G_TYPE_INVALID => ::Quark::from_string("<invalid>"),
             _ => unsafe { from_glib(gobject_sys::g_type_qname(self.to_glib())) },
         }
     }
 
-    pub fn is_a(&self, other: &Type) -> bool {
+    pub fn is_a(&self, other: &Self) -> bool {
         unsafe { from_glib(gobject_sys::g_type_is_a(self.to_glib(), other.to_glib())) }
     }
 
@@ -116,7 +135,7 @@ impl Type {
     }
     pub fn interface_prerequisites(&self) -> Vec<Self> {
         match self {
-            t if !t.is_a(&Type::BaseInterface) => vec![],
+            t if !t.is_a(&Self::BASE_INTERFACE) => vec![],
             _ => unsafe {
                 let mut n_prereqs = 0u32;
                 let prereqs =
@@ -136,6 +155,10 @@ impl Type {
                 Some(from_glib(type_))
             }
         }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        *self != Self::INVALID
     }
 }
 
@@ -205,7 +228,7 @@ macro_rules! builtin {
     };
 }
 
-builtin!(bool, Bool);
+builtin!(bool, BOOL);
 builtin!(i8, I8);
 builtin!(u8, U8);
 builtin!(i32, I32);
@@ -214,8 +237,8 @@ builtin!(i64, I64);
 builtin!(u64, U64);
 builtin!(f32, F32);
 builtin!(f64, F64);
-builtin!(str, String);
-builtin!(String, String);
+builtin!(str, STRING);
+builtin!(String, STRING);
 
 impl<'a> StaticType for [&'a str] {
     fn static_type() -> Type {
@@ -240,66 +263,16 @@ pub unsafe fn instance_of<C: StaticType>(ptr: glib_sys::gconstpointer) -> bool {
 
 impl FromGlib<glib_sys::GType> for Type {
     #[inline]
-    fn from_glib(val: glib_sys::GType) -> Type {
-        use self::Type::*;
-        match val {
-            gobject_sys::G_TYPE_INVALID => Invalid,
-            gobject_sys::G_TYPE_NONE => Unit,
-            gobject_sys::G_TYPE_INTERFACE => BaseInterface,
-            gobject_sys::G_TYPE_CHAR => I8,
-            gobject_sys::G_TYPE_UCHAR => U8,
-            gobject_sys::G_TYPE_BOOLEAN => Bool,
-            gobject_sys::G_TYPE_INT => I32,
-            gobject_sys::G_TYPE_UINT => U32,
-            gobject_sys::G_TYPE_LONG => ILong,
-            gobject_sys::G_TYPE_ULONG => ULong,
-            gobject_sys::G_TYPE_INT64 => I64,
-            gobject_sys::G_TYPE_UINT64 => U64,
-            gobject_sys::G_TYPE_ENUM => BaseEnum,
-            gobject_sys::G_TYPE_FLAGS => BaseFlags,
-            gobject_sys::G_TYPE_FLOAT => F32,
-            gobject_sys::G_TYPE_DOUBLE => F64,
-            gobject_sys::G_TYPE_STRING => String,
-            gobject_sys::G_TYPE_POINTER => Pointer,
-            gobject_sys::G_TYPE_BOXED => BaseBoxed,
-            gobject_sys::G_TYPE_PARAM => BaseParamSpec,
-            gobject_sys::G_TYPE_OBJECT => BaseObject,
-            gobject_sys::G_TYPE_VARIANT => Variant,
-            x => Other(x as usize),
-        }
+    fn from_glib(val: glib_sys::GType) -> Self {
+        Self(val)
     }
 }
 
 impl ToGlib for Type {
     type GlibType = glib_sys::GType;
 
-    fn to_glib(&self) -> glib_sys::GType {
-        use self::Type::*;
-        match *self {
-            Invalid => gobject_sys::G_TYPE_INVALID,
-            Unit => gobject_sys::G_TYPE_NONE,
-            BaseInterface => gobject_sys::G_TYPE_INTERFACE,
-            I8 => gobject_sys::G_TYPE_CHAR,
-            U8 => gobject_sys::G_TYPE_UCHAR,
-            Bool => gobject_sys::G_TYPE_BOOLEAN,
-            I32 => gobject_sys::G_TYPE_INT,
-            U32 => gobject_sys::G_TYPE_UINT,
-            ILong => gobject_sys::G_TYPE_LONG,
-            ULong => gobject_sys::G_TYPE_ULONG,
-            I64 => gobject_sys::G_TYPE_INT64,
-            U64 => gobject_sys::G_TYPE_UINT64,
-            BaseEnum => gobject_sys::G_TYPE_ENUM,
-            BaseFlags => gobject_sys::G_TYPE_FLAGS,
-            F32 => gobject_sys::G_TYPE_FLOAT,
-            F64 => gobject_sys::G_TYPE_DOUBLE,
-            String => gobject_sys::G_TYPE_STRING,
-            Pointer => gobject_sys::G_TYPE_POINTER,
-            BaseBoxed => gobject_sys::G_TYPE_BOXED,
-            BaseParamSpec => gobject_sys::G_TYPE_PARAM,
-            BaseObject => gobject_sys::G_TYPE_OBJECT,
-            Variant => gobject_sys::G_TYPE_VARIANT,
-            Other(x) => x as glib_sys::GType,
-        }
+    fn to_glib(&self) -> Self::GlibType {
+        self.0
     }
 }
 
@@ -380,16 +353,17 @@ mod tests {
 
     #[test]
     fn invalid() {
-        let invalid = Type::Invalid;
+        let invalid = Type::INVALID;
 
         assert_eq!(invalid.name(), "<invalid>");
         assert_eq!(invalid.qname(), ::Quark::from_string("<invalid>"));
-        assert!(invalid.is_a(&Type::Invalid));
-        assert!(!invalid.is_a(&Type::String));
+        assert!(invalid.is_a(&Type::INVALID));
+        assert!(!invalid.is_a(&Type::STRING));
         assert_eq!(invalid.parent(), None);
         assert_eq!(invalid.children(), vec![]);
         assert_eq!(invalid.interfaces(), vec![]);
         assert_eq!(invalid.interface_prerequisites(), vec![]);
+        assert!(!invalid.is_valid());
         dbg!(&invalid);
     }
 
@@ -398,7 +372,7 @@ mod tests {
         // Get this first so the type is registered
         let iu_type = InitiallyUnowned::static_type();
 
-        let set = Type::BaseObject
+        let set = Type::BASE_OBJECT
             .children()
             .into_iter()
             .collect::<HashSet<_>>();
@@ -410,9 +384,9 @@ mod tests {
     fn ord() {
         // Get this first so the type is registered
         let iu_type = InitiallyUnowned::static_type();
-        assert!(Type::BaseObject < iu_type);
+        assert!(Type::BASE_OBJECT < iu_type);
 
-        let set = Type::BaseObject
+        let set = Type::BASE_OBJECT
             .children()
             .into_iter()
             .collect::<BTreeSet<_>>();

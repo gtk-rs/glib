@@ -142,12 +142,12 @@ mod test {
 
     #[test]
     fn test_register() {
-        assert_ne!(::Type::Invalid, MyBoxed::get_type());
+        assert!(MyBoxed::get_type().is_valid());
     }
 
     #[test]
     fn test_value_boxed() {
-        assert_ne!(::Type::Invalid, MyBoxed::get_type());
+        assert!(MyBoxed::get_type().is_valid());
 
         let b = Boxed(MyBoxed(String::from("abc")));
         let v = b.to_value();
@@ -157,7 +157,7 @@ mod test {
 
     #[test]
     fn test_value() {
-        assert_ne!(::Type::Invalid, MyBoxed::get_type());
+        assert!(MyBoxed::get_type().is_valid());
 
         let b = MyBoxed(String::from("abc"));
         let v = b.to_value();

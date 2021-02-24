@@ -195,7 +195,7 @@ macro_rules! glib_object_subclass {
     () => {
         fn type_data() -> ::std::ptr::NonNull<$crate::subclass::TypeData> {
             static mut DATA: $crate::subclass::TypeData = $crate::subclass::TypeData {
-                type_: $crate::Type::Invalid,
+                type_: $crate::Type::INVALID,
                 parent_class: ::std::ptr::null_mut(),
                 interface_data: ::std::ptr::null_mut(),
                 private_offset: 0,
@@ -214,7 +214,7 @@ macro_rules! glib_object_subclass {
             unsafe {
                 let data = Self::type_data();
                 let type_ = data.as_ref().get_type();
-                assert_ne!(type_, $crate::Type::Invalid);
+                assert!(type_.is_valid());
 
                 type_
             }
@@ -294,7 +294,7 @@ pub trait ObjectSubclass: Sized + 'static {
         unsafe {
             let data = Self::type_data();
             let type_ = data.as_ref().get_type();
-            assert_ne!(type_, Type::Invalid);
+            assert!(type_.is_valid());
 
             let offset = -data.as_ref().private_offset;
 
@@ -321,7 +321,7 @@ pub trait ObjectSubclass: Sized + 'static {
         unsafe {
             let data = Self::type_data();
             let type_ = data.as_ref().get_type();
-            assert_ne!(type_, Type::Invalid);
+            assert!(type_.is_valid());
 
             assert!(obj.get_type().is_a(&type_));
 
@@ -733,7 +733,8 @@ pub(crate) unsafe fn signal_chain_from_overridden(
         values.as_ptr() as *mut Value as *mut gobject_sys::GValue,
         result.to_glib_none_mut().0,
     );
-    if result.type_() != Type::Unit && result.type_() != Type::Invalid {
+    let result_type = result.type_();
+    if result_type.is_valid() && result_type != Type::UNIT {
         Some(result)
     } else {
         None

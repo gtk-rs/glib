@@ -1646,14 +1646,14 @@ impl<T: ObjectType> ObjectExt for T {
             );
 
             // This can't really happen unless something goes wrong inside GObject
-            if value.type_() == ::Type::Invalid {
+            if value.type_().is_valid() {
+                Ok(value)
+            } else {
                 Err(glib_bool_error!(
                     "Failed to get property value for property '{}' of type '{}'",
                     property_name,
                     self.get_type()
                 ))
-            } else {
-                Ok(value)
             }
         }
     }
@@ -1905,7 +1905,7 @@ impl<T: ObjectType> ObjectExt for T {
         let closure = Closure::new_unsafe(move |values| {
             let ret = callback(values);
 
-            if return_type == Type::Unit {
+            if return_type == Type::UNIT {
                 if let Some(ret) = ret {
                     panic!(
                         "Signal '{}' of type '{}' required no return value but got value of type '{}'",
@@ -2019,7 +2019,7 @@ impl<T: ObjectType> ObjectExt for T {
                 validate_signal_arguments(type_, signal_name, &mut args[1..])?;
 
             let mut return_value = Value::uninitialized();
-            if return_type != Type::Unit {
+            if return_type != Type::UNIT {
                 gobject_sys::g_value_init(return_value.to_glib_none_mut().0, return_type.to_glib());
             }
 
@@ -2030,7 +2030,8 @@ impl<T: ObjectType> ObjectExt for T {
                 return_value.to_glib_none_mut().0,
             );
 
-            if return_value.type_() != Type::Unit && return_value.type_() != Type::Invalid {
+            let return_type = return_value.type_();
+            if return_type.is_valid() && return_type != Type::UNIT {
                 Ok(Some(return_value))
             } else {
                 Ok(None)
@@ -2064,7 +2065,7 @@ impl<T: ObjectType> ObjectExt for T {
                 validate_signal_arguments(type_, signal_name, &mut args[1..])?;
 
             let mut return_value = Value::uninitialized();
-            if return_type != Type::Unit {
+            if return_type != Type::UNIT {
                 gobject_sys::g_value_init(return_value.to_glib_none_mut().0, return_type.to_glib());
             }
 
@@ -2075,7 +2076,8 @@ impl<T: ObjectType> ObjectExt for T {
                 return_value.to_glib_none_mut().0,
             );
 
-            if return_value.type_() != Type::Unit && return_value.type_() != Type::Invalid {
+            let return_type = return_value.type_();
+            if return_type.is_valid() && return_type != Type::UNIT {
                 Ok(Some(return_value))
             } else {
                 Ok(None)

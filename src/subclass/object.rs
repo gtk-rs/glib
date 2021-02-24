@@ -415,7 +415,7 @@ mod test {
                 "name-changed",
                 SignalFlags::RUN_LAST,
                 &[String::static_type()],
-                ::Type::Unit,
+                ::Type::UNIT,
             );
 
             klass.add_signal_with_class_handler(

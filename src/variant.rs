@@ -119,7 +119,7 @@ glib_wrapper! {
 
 impl StaticType for Variant {
     fn static_type() -> Type {
-        Type::Variant
+        Type::VARIANT
     }
 }
 

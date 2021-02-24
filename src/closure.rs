@@ -12,7 +12,6 @@ use libc::{c_uint, c_void};
 
 use gobject_sys;
 use translate::{from_glib_none, mut_override, ToGlibPtr, ToGlibPtrMut, Uninitialized};
-use types::Type;
 use ToValue;
 use Value;
 
@@ -118,10 +117,10 @@ impl Closure {
             result
         };
 
-        if result.type_() == Type::Invalid {
-            None
-        } else {
+        if result.type_().is_valid() {
             Some(result)
+        } else {
+            None
         }
     }
 }
