@@ -17,7 +17,7 @@ use std::mem;
 use std::ptr;
 
 /// A GLib or GLib-based library type
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
     /// An invalid `Type` used as error return value in some functions
     Invalid,
@@ -375,6 +375,8 @@ impl FromGlibContainerAsVec<Type, *mut glib_sys::GType> for Type {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{BTreeSet, HashSet};
+    use InitiallyUnowned;
 
     #[test]
     fn invalid() {
@@ -389,5 +391,32 @@ mod tests {
         assert_eq!(invalid.interfaces(), vec![]);
         assert_eq!(invalid.interface_prerequisites(), vec![]);
         dbg!(&invalid);
+    }
+
+    #[test]
+    fn hash() {
+        // Get this first so the type is registered
+        let iu_type = InitiallyUnowned::static_type();
+
+        let set = Type::BaseObject
+            .children()
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        assert!(set.contains(&iu_type));
+    }
+
+    #[test]
+    fn ord() {
+        // Get this first so the type is registered
+        let iu_type = InitiallyUnowned::static_type();
+        assert!(Type::BaseObject < iu_type);
+
+        let set = Type::BaseObject
+            .children()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+
+        assert!(set.contains(&iu_type));
     }
 }
